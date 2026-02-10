@@ -5,8 +5,14 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "bin": {
-    "dataiku-mcp": "./bin/dataiku-mcp-server.js"
+  "bin": "bin/dataiku-mcp-server.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/clssck/Dataiku_MCP"
+  },
+  "homepage": "https://github.com/clssck/Dataiku_MCP",
+  "bugs": {
+    "url": "https://github.com/clssck/Dataiku_MCP/issues"
   },
   "files": [
     "dist",
