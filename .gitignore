@@ -1,6 +1,30 @@
+# Dependencies
 node_modules/
-dist/
-*.js.map
-.env
 
+# Build artifacts
+dist/
+coverage/
+*.tsbuildinfo
+*.js.map
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# OS / editor
 .DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local agent/client state
+.claude/settings.local.json

@@ -2,7 +2,7 @@
   "mcpServers": {
     "dataiku": {
       "command": "npx",
-      "args": ["tsx", "/Users/clssck/Projects/dataiku_mcp_skill/src/index.ts"],
+      "args": ["tsx", "src/index.ts"],
       "env": {
         "DATAIKU_URL": "",
         "DATAIKU_API_KEY": "",

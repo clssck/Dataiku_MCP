@@ -1,1 +1,0 @@
-{"root":["./src/client.ts","./src/index.ts","./src/tools/code-envs.ts","./src/tools/connections.ts","./src/tools/datasets.ts","./src/tools/flow-map.ts","./src/tools/folders.ts","./src/tools/jobs.ts","./src/tools/projects.ts","./src/tools/recipes.ts","./src/tools/scenarios.ts","./src/tools/variables.ts"],"version":"5.9.3"}
