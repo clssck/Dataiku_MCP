@@ -201,17 +201,27 @@ Inputs:
 
 Required repository configuration:
 
-- GitHub secret: `NPM_TOKEN` (npm automation token)
 - GitHub variable: `NPM_RELEASE_ENABLED=true`
 - Optional variable: `NPM_PUBLISH_ACCESS=public`
+- Trusted publisher configured on npmjs.com for this package/repo/workflow
 
 The workflow will:
 
 1. Install dependencies, run checks/tests, and build.
 2. Bump package version and create git tag.
 3. Push commit + tag to `main`.
-4. Publish to npm (if `publish=true`).
+4. Publish to npm with GitHub OIDC trusted publishing (if `publish=true`).
 5. Create a GitHub Release with generated notes.
+
+Trusted publishing setup (npm):
+
+1. Open `https://www.npmjs.com/package/dataiku-mcp` -> `Settings` -> `Trusted Publisher`.
+2. Choose `GitHub Actions`.
+3. Set:
+   - Organization or user: `clssck`
+   - Repository: `Dataiku_MCP`
+   - Workflow filename: `release.yml`
+4. Save.
 
 ## Recommended Verification Prompt
 

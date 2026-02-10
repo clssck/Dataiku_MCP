@@ -51,16 +51,6 @@ jobs:
           npm test
           npm run build
 
-      - name: Ensure NPM token is present when publishing
-        if: ${{ inputs.publish }}
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if [ -z "${NPM_TOKEN}" ]; then
-            echo "NPM_TOKEN secret is missing. Configure it in repository secrets."
-            exit 1
-          fi
-
       - name: Configure git author
         run: |
           git config user.name "github-actions[bot]"
@@ -80,8 +70,6 @@ jobs:
 
       - name: Publish package to npm
         if: ${{ inputs.publish }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --access ${{ vars.NPM_PUBLISH_ACCESS || 'public' }}
 
       - name: Push commit and tag
