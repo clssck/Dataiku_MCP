@@ -1,12 +1,12 @@
 {
-  "name": "@clssck/dataiku-mcp-skill",
+  "name": "dataiku-mcp",
   "version": "1.0.1",
   "description": "MCP server for Dataiku DSS REST API",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "dataiku-mcp-server": "./bin/dataiku-mcp-server.js"
+    "dataiku-mcp": "./bin/dataiku-mcp-server.js"
   },
   "files": [
     "dist",

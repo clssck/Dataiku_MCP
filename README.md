@@ -43,7 +43,7 @@ node dist/index.js
 Use directly from npm (after publish):
 
 ```bash
-npx -y @clssck/dataiku-mcp-skill
+npx -y dataiku-mcp
 ```
 
 Create a local env file:
@@ -91,7 +91,7 @@ Use this server command in clients (npm package):
 ```json
 {
   "command": "npx",
-  "args": ["-y", "@clssck/dataiku-mcp-skill"],
+  "args": ["-y", "dataiku-mcp"],
   "env": {
     "DATAIKU_URL": "https://your-dss-instance.app.dataiku.io",
     "DATAIKU_API_KEY": "your_api_key",
@@ -105,7 +105,7 @@ You can also run TypeScript directly during development:
 ```json
 {
   "command": "npx",
-  "args": ["tsx", "/absolute/path/to/dataiku_mcp_skill/src/index.ts"],
+  "args": ["tsx", "/absolute/path/to/Dataiku_MCP/src/index.ts"],
   "env": {
     "DATAIKU_URL": "https://your-dss-instance.app.dataiku.io",
     "DATAIKU_API_KEY": "your_api_key",
@@ -124,7 +124,7 @@ You can also run TypeScript directly during development:
   "mcpServers": {
     "dataiku": {
       "command": "npx",
-      "args": ["-y", "@clssck/dataiku-mcp-skill"],
+      "args": ["-y", "dataiku-mcp"],
       "env": {
         "DATAIKU_URL": "https://your-dss-instance.app.dataiku.io",
         "DATAIKU_API_KEY": "your_api_key",
@@ -149,7 +149,7 @@ Example:
   "mcpServers": {
     "dataiku": {
       "command": "npx",
-      "args": ["-y", "@clssck/dataiku-mcp-skill"],
+      "args": ["-y", "dataiku-mcp"],
       "env": {
         "DATAIKU_URL": "https://your-dss-instance.app.dataiku.io",
         "DATAIKU_API_KEY": "your_api_key",
@@ -170,7 +170,7 @@ Example:
   "mcpServers": {
     "dataiku": {
       "command": "npx",
-      "args": ["-y", "@clssck/dataiku-mcp-skill"],
+      "args": ["-y", "dataiku-mcp"],
       "env": {
         "DATAIKU_URL": "https://your-dss-instance.app.dataiku.io",
         "DATAIKU_API_KEY": "your_api_key",
