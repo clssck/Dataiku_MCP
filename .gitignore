@@ -27,4 +27,4 @@ Thumbs.db
 *.swo
 
 # Local agent/client state
-.claude/settings.local.json
+.claude/
