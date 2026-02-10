@@ -1,0 +1,98 @@
+name: Release NPM Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump type"
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      version:
+        description: "Exact version (optional, overrides bump), ex: 1.2.3"
+        required: false
+        type: string
+      publish:
+        description: "Publish to npm"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    if: ${{ vars.NPM_RELEASE_ENABLED != 'false' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate build and tests
+        run: |
+          npm run check
+          npm test
+          npm run build
+
+      - name: Ensure NPM token is present when publishing
+        if: ${{ inputs.publish }}
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "${NPM_TOKEN}" ]; then
+            echo "NPM_TOKEN secret is missing. Configure it in repository secrets."
+            exit 1
+          fi
+
+      - name: Configure git author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump package version and create tag
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            npm version "${{ inputs.version }}" -m "chore(release): %s [skip ci]"
+          else
+            npm version "${{ inputs.bump }}" -m "chore(release): %s [skip ci]"
+          fi
+          VERSION="$(npm pkg get version | tr -d '\"')"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Push commit and tag
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: git push origin "${BRANCH}" --follow-tags
+
+      - name: Publish package to npm
+        if: ${{ inputs.publish }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access ${{ vars.NPM_PUBLISH_ACCESS || 'public' }}
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --title "${{ steps.version.outputs.tag }}" \
+            --generate-notes

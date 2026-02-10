@@ -34,6 +34,18 @@ npm ci
 npm run build
 ```
 
+Run as a local CLI after build:
+
+```bash
+node dist/index.js
+```
+
+Use directly from npm (after publish):
+
+```bash
+npx -y @clssck/dataiku-mcp-skill
+```
+
 Create a local env file:
 
 ```bash
@@ -74,12 +86,12 @@ DATAIKU_MCP_DESTRUCTIVE_TESTS=1 npm run test:integration
 
 ## MCP Client Setup Guide
 
-Use this server command in clients:
+Use this server command in clients (npm package):
 
 ```json
 {
-  "command": "node",
-  "args": ["/absolute/path/to/dataiku_mcp_skill/dist/index.js"],
+  "command": "npx",
+  "args": ["-y", "@clssck/dataiku-mcp-skill"],
   "env": {
     "DATAIKU_URL": "https://your-dss-instance.app.dataiku.io",
     "DATAIKU_API_KEY": "your_api_key",
@@ -111,8 +123,8 @@ You can also run TypeScript directly during development:
 {
   "mcpServers": {
     "dataiku": {
-      "command": "node",
-      "args": ["/absolute/path/to/dataiku_mcp_skill/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "@clssck/dataiku-mcp-skill"],
       "env": {
         "DATAIKU_URL": "https://your-dss-instance.app.dataiku.io",
         "DATAIKU_API_KEY": "your_api_key",
@@ -136,8 +148,8 @@ Example:
 {
   "mcpServers": {
     "dataiku": {
-      "command": "node",
-      "args": ["/absolute/path/to/dataiku_mcp_skill/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "@clssck/dataiku-mcp-skill"],
       "env": {
         "DATAIKU_URL": "https://your-dss-instance.app.dataiku.io",
         "DATAIKU_API_KEY": "your_api_key",
@@ -157,8 +169,8 @@ Example:
 {
   "mcpServers": {
     "dataiku": {
-      "command": "node",
-      "args": ["/absolute/path/to/dataiku_mcp_skill/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "@clssck/dataiku-mcp-skill"],
       "env": {
         "DATAIKU_URL": "https://your-dss-instance.app.dataiku.io",
         "DATAIKU_API_KEY": "your_api_key",
@@ -173,6 +185,33 @@ Example:
 
 This repo already includes a project-scoped MCP file at `.mcp.json`.
 Update the path/env values and use it directly with Codex-compatible tooling.
+
+## NPM Release Workflow
+
+This repo includes a manual GitHub Actions release workflow:
+
+- Workflow file: `.github/workflows/release.yml`
+- Trigger: `Actions` -> `Release NPM Package` -> `Run workflow`
+
+Inputs:
+
+- `bump`: `patch | minor | major`
+- `version`: optional exact version (overrides `bump`)
+- `publish`: whether to publish to npm
+
+Required repository configuration:
+
+- GitHub secret: `NPM_TOKEN` (npm automation token)
+- GitHub variable: `NPM_RELEASE_ENABLED=true`
+- Optional variable: `NPM_PUBLISH_ACCESS=public`
+
+The workflow will:
+
+1. Install dependencies, run checks/tests, and build.
+2. Bump package version and create git tag.
+3. Push commit + tag to `main`.
+4. Publish to npm (if `publish=true`).
+5. Create a GitHub Release with generated notes.
 
 ## Recommended Verification Prompt
 

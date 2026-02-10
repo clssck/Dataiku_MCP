@@ -1,15 +1,32 @@
 {
-  "name": "dataiku-mcp-server",
+  "name": "@clssck/dataiku-mcp-skill",
   "version": "1.0.0",
   "description": "MCP server for Dataiku DSS REST API",
   "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "dataiku-mcp-server": "./bin/dataiku-mcp-server.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "npx tsx src/index.ts",
     "build": "tsc",
     "check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:integration": "vitest run --project integration"
+    "test:integration": "vitest run --project integration",
+    "prepublishOnly": "npm run check && npm test && npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
