@@ -1,0 +1,99 @@
+{
+  "recipe": {
+    "name": "compute_tx_prepared",
+    "projectKey": "TUT_VARIABLES",
+    "type": "shaker",
+    "neverRecomputeExistingPartitions": false,
+    "params": {
+      "engineParams": {
+        "spark": {
+          "readParams": {
+            "mode": "AUTO",
+            "autoModeRepartitionInto": 10,
+            "map": {}
+          },
+          "useGlobalMetastore": false,
+          "useNativeProcessors": true,
+          "sparkConfig": {
+            "inheritConf": "default",
+            "conf": []
+          },
+          "executionEngine": "SPARK_SUBMIT",
+          "pipelineAllowStart": true,
+          "pipelineAllowMerge": true,
+          "skipPrerunValidate": false
+        },
+        "hive": {
+          "inheritConf": "default",
+          "hiveconf": [],
+          "executionEngine": "HIVECLI_LOCAL",
+          "addDkuUdf": false,
+          "skipPrerunValidate": false
+        },
+        "impala": {
+          "forceStreamMode": true
+        },
+        "hadoopConfigKeys": [],
+        "sqlPipelineParams": {
+          "pipelineAllowStart": true,
+          "pipelineAllowMerge": true
+        },
+        "maxThreads": 8,
+        "containerSelection": {
+          "containerMode": "INHERIT"
+        }
+      }
+    },
+    "customMeta": {
+      "kv": {}
+    },
+    "redispatchPartitioning": false,
+    "maxRunningActivities": 0,
+    "hashPropagationBehavior": "INHERIT",
+    "variables": {},
+    "dkuProperties": [],
+    "inputs": {
+      "main": {
+        "items": [
+          {
+            "ref": "tx_joined",
+            "deps": []
+          }
+        ]
+      }
+    },
+    "outputs": {
+      "main": {
+        "items": [
+          {
+            "ref": "tx_prepared",
+            "appendMode": false
+          }
+        ]
+      }
+    },
+    "labels": [],
+    "versionTag": {
+      "versionNumber": 0,
+      "lastModifiedBy": {
+        "login": "admin"
+      },
+      "lastModifiedOn": 1697473568482,
+      "extendedProperties": {}
+    },
+    "creationTag": {
+      "versionNumber": 0,
+      "lastModifiedBy": {
+        "login": "admin"
+      },
+      "lastModifiedOn": 1697473568482,
+      "extendedProperties": {}
+    },
+    "tags": [],
+    "customFields": {},
+    "checklists": {
+      "checklists": []
+    }
+  },
+  "payload": "{\n  \"columnsSelection\": {\n    \"mode\": \"ALL\"\n  },\n  \"explorationSampling\": {\n    \"_refreshTrigger\": 0,\n    \"selection\": {\n      \"filter\": {\n        \"distinct\": false,\n        \"enabled\": false\n      },\n      \"latestPartitionsN\": 1,\n      \"maxRecords\": 10000,\n      \"maxRecordsForDisplay\": -1,\n      \"ordering\": {\n        \"rules\": [],\n        \"enabled\": false\n      },\n      \"withinFirstN\": -1,\n      \"partitionSelectionMethod\": \"ALL\",\n      \"maxStoredBytes\": -1,\n      \"targetRatio\": 0.02,\n      \"maxReadUncompressedBytes\": -1,\n      \"samplingMethod\": \"HEAD_SEQUENTIAL\",\n      \"timeout\": -1\n    },\n    \"autoRefreshSample\": false\n  },\n  \"explorationFilters\": [],\n  \"columnUseScientificNotationByName\": {},\n  \"exploreUIParams\": {\n    \"autoRefresh\": true\n  },\n  \"steps\": [\n    {\n      \"preview\": false,\n      \"metaType\": \"PROCESSOR\",\n      \"disabled\": false,\n      \"type\": \"DateParser\",\n      \"params\": {\n        \"outCol\": \"\",\n        \"formats\": [\n          \"yyyy-MM-dd\"\n        ],\n        \"columns\": [\n          \"purchase_date\"\n        ],\n        \"timezone_id\": \"UTC\",\n        \"appliesTo\": \"SINGLE_COLUMN\",\n        \"lang\": \"auto\"\n      },\n      \"alwaysShowComment\": false\n    },\n    {\n      \"preview\": false,\n      \"metaType\": \"PROCESSOR\",\n      \"disabled\": false,\n      \"type\": \"CurrencyConverterProcessor\",\n      \"params\": {\n        \"outputCurrency\": \"EUR\",\n        \"inputCurrency\": \"USD\",\n        \"isCurrencyFromColumn\": false,\n        \"outputColumn\": \"purchase_amount_eur\",\n        \"decimalNumber\": 2,\n        \"refDateColumn\": \"purchase_date\",\n        \"inputColumn\": \"purchase_amount\",\n        \"dateInput\": \"COLUMN\"\n      },\n      \"alwaysShowComment\": false\n    },\n    {\n      \"preview\": false,\n      \"metaType\": \"PROCESSOR\",\n      \"disabled\": false,\n      \"type\": \"RoundProcessor\",\n      \"params\": {\n        \"mode\": \"ROUND\",\n        \"places\": 2,\n        \"columns\": [\n          \"purchase_amount\"\n        ],\n        \"precision\": 0,\n        \"appliesTo\": \"SINGLE_COLUMN\"\n      },\n      \"alwaysShowComment\": false\n    },\n    {\n      \"preview\": false,\n      \"metaType\": \"PROCESSOR\",\n      \"disabled\": false,\n      \"type\": \"TextSimplifierProcessor\",\n      \"params\": {\n        \"inCol\": \"product_title\",\n        \"sortAlphabetically\": false,\n        \"normalize\": true,\n        \"language\": \"english\",\n        \"clearStopWords\": false,\n        \"stem\": false\n      },\n      \"alwaysShowComment\": false\n    },\n    {\n      \"preview\": false,\n      \"metaType\": \"PROCESSOR\",\n      \"disabled\": false,\n      \"type\": \"RegexpExtractor\",\n      \"params\": {\n        \"found_col\": false,\n        \"extractAllOccurrences\": false,\n        \"prefix\": \"apple\",\n        \"column\": \"product_title\",\n        \"pattern\": \"\\\\b(apple|macbook|ipad|iphone|ipod)\\\\b\"\n      },\n      \"alwaysShowComment\": false\n    }\n  ],\n  \"maxProcessedMemTableBytes\": -1,\n  \"previewMode\": \"ALL_ROWS\",\n  \"vizSampling\": {\n    \"_refreshTrigger\": 0,\n    \"selection\": {\n      \"useMemTable\": false,\n      \"filter\": {\n        \"distinct\": false,\n        \"enabled\": false\n      },\n      \"latestPartitionsN\": 1,\n      \"maxRecords\": -1,\n      \"ordering\": {\n        \"rules\": [],\n        \"enabled\": false\n      },\n      \"withinFirstN\": -1,\n      \"partitionSelectionMethod\": \"ALL\",\n      \"targetRatio\": 0.02,\n      \"maxReadUncompressedBytes\": -1,\n      \"samplingMethod\": \"FULL\"\n    },\n    \"autoRefreshSample\": false\n  },\n  \"analysisColumnData\": {},\n  \"columnWidthsByName\": {\n    \"purchase_amount_eur\": 158,\n    \"merchant_latitude\": 143,\n    \"merchant_subsector\": 183,\n    \"cardholder_age\": 120,\n    \"merchant_id\": 127,\n    \"reward_program\": 155,\n    \"merchant_category_id\": 165,\n    \"first_active_month\": 150,\n    \"card_id\": 120,\n    \"item_category\": 113,\n    \"product_title\": 300,\n    \"merchant_longitude\": 150,\n    \"cardholder_fico_range\": 173,\n    \"purchase_date_parsed\": 190,\n    \"purchase_amount\": 155,\n    \"cardholder_fico_score\": 173,\n    \"signature_provided\": 150,\n    \"id\": 100,\n    \"purchase_date\": 141,\n    \"authorized_flag\": 128,\n    \"purchase_amount_\": 135\n  },\n  \"sorting\": [],\n  \"globalSearchQuery\": \"\",\n  \"coloring\": {\n    \"scheme\": \"MEANING_AND_STATUS\",\n    \"individualColumns\": [],\n    \"valueColoringMode\": \"HASH\"\n  }\n}"
+}

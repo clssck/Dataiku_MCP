@@ -1,0 +1,395 @@
+{
+  "projectKey": "TUT_VARIABLES",
+  "nodes": [
+    {
+      "id": "ass",
+      "kind": "dataset",
+      "name": "ass"
+    },
+    {
+      "id": "cards",
+      "kind": "dataset",
+      "name": "cards"
+    },
+    {
+      "id": "cards_analysis",
+      "kind": "dataset",
+      "name": "cards_analysis"
+    },
+    {
+      "id": "cards_prepared",
+      "kind": "dataset",
+      "name": "cards_prepared"
+    },
+    {
+      "id": "compute_ass",
+      "kind": "recipe",
+      "name": "compute_ass",
+      "subtype": "python"
+    },
+    {
+      "id": "compute_cards_analysis",
+      "kind": "recipe",
+      "name": "compute_cards_analysis",
+      "subtype": "python"
+    },
+    {
+      "id": "compute_cards_prepared",
+      "kind": "recipe",
+      "name": "compute_cards_prepared",
+      "subtype": "shaker"
+    },
+    {
+      "id": "compute_tx_distinct",
+      "kind": "recipe",
+      "name": "compute_tx_distinct",
+      "subtype": "distinct"
+    },
+    {
+      "id": "compute_tx_joined",
+      "kind": "recipe",
+      "name": "compute_tx_joined",
+      "subtype": "join"
+    },
+    {
+      "id": "compute_tx_pivot",
+      "kind": "recipe",
+      "name": "compute_tx_pivot",
+      "subtype": "pivot"
+    },
+    {
+      "id": "compute_tx_prepared",
+      "kind": "recipe",
+      "name": "compute_tx_prepared",
+      "subtype": "shaker"
+    },
+    {
+      "id": "compute_tx_topn",
+      "kind": "recipe",
+      "name": "compute_tx_topn",
+      "subtype": "topn"
+    },
+    {
+      "id": "compute_tx_windows",
+      "kind": "recipe",
+      "name": "compute_tx_windows",
+      "subtype": "window"
+    },
+    {
+      "id": "download_to_merchants",
+      "kind": "recipe",
+      "name": "download_to_merchants",
+      "subtype": "download"
+    },
+    {
+      "id": "eB0k3any",
+      "kind": "folder",
+      "name": "tx"
+    },
+    {
+      "id": "FilesInFolder->TUT_VARIABLES.merchants",
+      "kind": "recipe",
+      "name": "FilesInFolder->TUT_VARIABLES.merchants",
+      "subtype": "implicit"
+    },
+    {
+      "id": "FilesInFolder->TUT_VARIABLES.tx",
+      "kind": "recipe",
+      "name": "FilesInFolder->TUT_VARIABLES.tx",
+      "subtype": "implicit"
+    },
+    {
+      "id": "join_merchants_tx_joined",
+      "kind": "recipe",
+      "name": "join_merchants_tx_joined",
+      "subtype": "join"
+    },
+    {
+      "id": "jqBwVuQl",
+      "kind": "folder",
+      "name": "merchants"
+    },
+    {
+      "id": "merchants",
+      "kind": "dataset",
+      "name": "merchants"
+    },
+    {
+      "id": "merchants_tx_joined",
+      "kind": "dataset",
+      "name": "merchants_tx_joined"
+    },
+    {
+      "id": "python_combine_tx",
+      "kind": "recipe",
+      "name": "python_combine_tx",
+      "subtype": "python"
+    },
+    {
+      "id": "python_read_tx_2017",
+      "kind": "recipe",
+      "name": "python_read_tx_2017",
+      "subtype": "python"
+    },
+    {
+      "id": "python_read_tx_2018",
+      "kind": "recipe",
+      "name": "python_read_tx_2018",
+      "subtype": "python"
+    },
+    {
+      "id": "qRd6Z2aM",
+      "kind": "folder",
+      "name": "tetetete"
+    },
+    {
+      "id": "tx",
+      "kind": "dataset",
+      "name": "tx"
+    },
+    {
+      "id": "tx_2017",
+      "kind": "dataset",
+      "name": "tx_2017"
+    },
+    {
+      "id": "tx_2018",
+      "kind": "dataset",
+      "name": "tx_2018"
+    },
+    {
+      "id": "tx_combined",
+      "kind": "dataset",
+      "name": "tx_combined"
+    },
+    {
+      "id": "tx_distinct",
+      "kind": "dataset",
+      "name": "tx_distinct"
+    },
+    {
+      "id": "tx_joined",
+      "kind": "dataset",
+      "name": "tx_joined"
+    },
+    {
+      "id": "tx_pivot",
+      "kind": "dataset",
+      "name": "tx_pivot"
+    },
+    {
+      "id": "tx_prepared",
+      "kind": "dataset",
+      "name": "tx_prepared"
+    },
+    {
+      "id": "tx_topn",
+      "kind": "dataset",
+      "name": "tx_topn"
+    },
+    {
+      "id": "tx_windows",
+      "kind": "dataset",
+      "name": "tx_windows"
+    }
+  ],
+  "edges": [
+    {
+      "from": "cards",
+      "to": "compute_cards_analysis",
+      "relation": "reads"
+    },
+    {
+      "from": "cards",
+      "to": "compute_cards_prepared",
+      "relation": "reads"
+    },
+    {
+      "from": "cards_prepared",
+      "to": "compute_tx_joined",
+      "relation": "reads"
+    },
+    {
+      "from": "compute_ass",
+      "to": "ass",
+      "relation": "writes"
+    },
+    {
+      "from": "compute_cards_analysis",
+      "to": "cards_analysis",
+      "relation": "writes"
+    },
+    {
+      "from": "compute_cards_prepared",
+      "to": "cards_prepared",
+      "relation": "writes"
+    },
+    {
+      "from": "compute_tx_distinct",
+      "to": "tx_distinct",
+      "relation": "writes"
+    },
+    {
+      "from": "compute_tx_joined",
+      "to": "tx_joined",
+      "relation": "writes"
+    },
+    {
+      "from": "compute_tx_pivot",
+      "to": "tx_pivot",
+      "relation": "writes"
+    },
+    {
+      "from": "compute_tx_prepared",
+      "to": "tx_prepared",
+      "relation": "writes"
+    },
+    {
+      "from": "compute_tx_topn",
+      "to": "tx_topn",
+      "relation": "writes"
+    },
+    {
+      "from": "compute_tx_windows",
+      "to": "tx_windows",
+      "relation": "writes"
+    },
+    {
+      "from": "download_to_merchants",
+      "to": "jqBwVuQl",
+      "relation": "writes"
+    },
+    {
+      "from": "eB0k3any",
+      "to": "FilesInFolder->TUT_VARIABLES.tx",
+      "relation": "reads"
+    },
+    {
+      "from": "eB0k3any",
+      "to": "python_read_tx_2017",
+      "relation": "reads"
+    },
+    {
+      "from": "eB0k3any",
+      "to": "python_read_tx_2018",
+      "relation": "reads"
+    },
+    {
+      "from": "FilesInFolder->TUT_VARIABLES.merchants",
+      "to": "merchants",
+      "relation": "writes"
+    },
+    {
+      "from": "FilesInFolder->TUT_VARIABLES.tx",
+      "to": "tx",
+      "relation": "writes"
+    },
+    {
+      "from": "join_merchants_tx_joined",
+      "to": "merchants_tx_joined",
+      "relation": "writes"
+    },
+    {
+      "from": "jqBwVuQl",
+      "to": "FilesInFolder->TUT_VARIABLES.merchants",
+      "relation": "reads"
+    },
+    {
+      "from": "merchants",
+      "to": "compute_tx_joined",
+      "relation": "reads"
+    },
+    {
+      "from": "merchants",
+      "to": "join_merchants_tx_joined",
+      "relation": "reads"
+    },
+    {
+      "from": "python_combine_tx",
+      "to": "tx_combined",
+      "relation": "writes"
+    },
+    {
+      "from": "python_read_tx_2017",
+      "to": "tx_2017",
+      "relation": "writes"
+    },
+    {
+      "from": "python_read_tx_2018",
+      "to": "tx_2018",
+      "relation": "writes"
+    },
+    {
+      "from": "tx",
+      "to": "compute_tx_joined",
+      "relation": "reads"
+    },
+    {
+      "from": "tx",
+      "to": "join_merchants_tx_joined",
+      "relation": "reads"
+    },
+    {
+      "from": "tx_2017",
+      "to": "python_combine_tx",
+      "relation": "reads"
+    },
+    {
+      "from": "tx_2018",
+      "to": "python_combine_tx",
+      "relation": "reads"
+    },
+    {
+      "from": "tx_joined",
+      "to": "compute_tx_prepared",
+      "relation": "reads"
+    },
+    {
+      "from": "tx_prepared",
+      "to": "compute_tx_distinct",
+      "relation": "reads"
+    },
+    {
+      "from": "tx_prepared",
+      "to": "compute_tx_pivot",
+      "relation": "reads"
+    },
+    {
+      "from": "tx_prepared",
+      "to": "compute_tx_topn",
+      "relation": "reads"
+    },
+    {
+      "from": "tx_prepared",
+      "to": "compute_tx_windows",
+      "relation": "reads"
+    }
+  ],
+  "stats": {
+    "nodeCount": 35,
+    "edgeCount": 34,
+    "datasets": 16,
+    "recipes": 16,
+    "roots": 5,
+    "leaves": 9
+  },
+  "roots": [
+    "cards",
+    "compute_ass",
+    "download_to_merchants",
+    "eB0k3any",
+    "qRd6Z2aM"
+  ],
+  "leaves": [
+    "ass",
+    "cards_analysis",
+    "merchants_tx_joined",
+    "qRd6Z2aM",
+    "tx_combined",
+    "tx_distinct",
+    "tx_pivot",
+    "tx_topn",
+    "tx_windows"
+  ],
+  "warnings": []
+}
