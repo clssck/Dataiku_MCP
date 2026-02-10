@@ -78,16 +78,16 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Push commit and tag
-        env:
-          BRANCH: ${{ github.ref_name }}
-        run: git push origin "${BRANCH}" --follow-tags
-
       - name: Publish package to npm
         if: ${{ inputs.publish }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --access ${{ vars.NPM_PUBLISH_ACCESS || 'public' }}
+
+      - name: Push commit and tag
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: git push origin "${BRANCH}" --follow-tags
 
       - name: Create GitHub release
         env:
