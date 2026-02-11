@@ -1,6 +1,7 @@
 {
   "name": "dataiku-mcp",
   "version": "1.0.6",
+  "mcpName": "io.github.clssck/dataiku-mcp",
   "description": "MCP server for Dataiku DSS REST API",
   "type": "module",
   "main": "dist/index.js",

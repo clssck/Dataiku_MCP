@@ -1,0 +1,27 @@
+name: Publish to Smithery
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    if: ${{ vars.SMITHERY_RELEASE_ENABLED != 'false' && secrets.SMITHERY_API_KEY != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "lts/*"
+
+      - name: Publish local stdio server to Smithery
+        run: |
+          npx -y @smithery/cli publish \
+            --name @clssck/dataiku-mcp \
+            --transport stdio \
+            --key "${{ secrets.SMITHERY_API_KEY }}"

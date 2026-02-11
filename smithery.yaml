@@ -1,0 +1,28 @@
+# Smithery configuration: https://smithery.ai/docs/build/project-config
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      dataikuUrl:
+        type: string
+        description: Dataiku DSS instance URL.
+      dataikuApiKey:
+        type: string
+        description: Dataiku API key.
+      dataikuProjectKey:
+        type: string
+        description: Optional default Dataiku project key.
+    required:
+      - dataikuUrl
+      - dataikuApiKey
+  commandFunction: |-
+    (config) => ({
+      command: "npx",
+      args: ["-y", "dataiku-mcp"],
+      env: {
+        DATAIKU_URL: config.dataikuUrl,
+        DATAIKU_API_KEY: config.dataikuApiKey,
+        ...(config.dataikuProjectKey ? { DATAIKU_PROJECT_KEY: config.dataikuProjectKey } : {})
+      }
+    })

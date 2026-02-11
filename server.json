@@ -1,0 +1,44 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.clssck/dataiku-mcp",
+  "title": "Dataiku MCP",
+  "description": "MCP server for Dataiku DSS project, flow, and operations APIs.",
+  "version": "1.0.6",
+  "repository": {
+    "source": "github",
+    "url": "https://github.com/clssck/Dataiku_MCP",
+    "id": "1154872158"
+  },
+  "websiteUrl": "https://github.com/clssck/Dataiku_MCP",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "dataiku-mcp",
+      "version": "1.0.6",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "DATAIKU_URL",
+          "description": "Dataiku DSS instance URL (for example, https://my-dss.app.dataiku.io).",
+          "format": "string",
+          "isRequired": true
+        },
+        {
+          "name": "DATAIKU_API_KEY",
+          "description": "Dataiku API key.",
+          "format": "string",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "DATAIKU_PROJECT_KEY",
+          "description": "Optional default Dataiku project key.",
+          "format": "string",
+          "isRequired": false
+        }
+      ]
+    }
+  ]
+}

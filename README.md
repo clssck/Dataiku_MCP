@@ -245,6 +245,51 @@ Trusted publishing setup (npm):
    - Workflow filename: `release.yml`
 4. Save.
 
+## Official MCP Registry
+
+This repo is configured for MCP Registry publishing:
+
+- Metadata file: `server.json`
+- Workflow: `.github/workflows/publish-mcp-registry.yml`
+- Required package field: `mcpName` in `package.json`
+
+Server namespace:
+
+- `io.github.clssck/dataiku-mcp`
+
+Publish paths:
+
+1. Manual: run `Publish to MCP Registry` in GitHub Actions.
+2. Automatic: push a `v*` tag (already done by release workflow).
+
+Validation notes:
+
+- `server.json.name` must match `package.json.mcpName`.
+- `server.json.packages[].identifier` + `version` must reference a real npm publish.
+
+## Smithery
+
+This repo is configured for Smithery distribution:
+
+- Config file: `smithery.yaml`
+- Workflow: `.github/workflows/publish-smithery.yml`
+- Server name: `@clssck/dataiku-mcp`
+
+To enable CI publishing, add repository secret:
+
+- `SMITHERY_API_KEY`
+
+Then publish:
+
+1. Manual: run `Publish to Smithery` in GitHub Actions.
+2. Automatic: push a `v*` tag (workflow runs on tags).
+
+Local publish (optional):
+
+```bash
+npx -y @smithery/cli publish --name @clssck/dataiku-mcp --transport stdio
+```
+
 ## Recommended Verification Prompt
 
 After adding the server in a client, run:
