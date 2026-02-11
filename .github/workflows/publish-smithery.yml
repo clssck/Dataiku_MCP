@@ -26,10 +26,25 @@ jobs:
             exit 1
           fi
 
-      - name: Publish local stdio server to Smithery
+      - name: Ensure Smithery server exists
+        env:
+          SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY }}
+          SMITHERY_NAMESPACE: ${{ vars.SMITHERY_NAMESPACE }}
         run: |
+          NAMESPACE="${SMITHERY_NAMESPACE:-stoat-I3tM}"
+          curl -fsS -X PUT \
+            "https://api.smithery.ai/servers/${NAMESPACE}/dataiku-mcp" \
+            -H "Authorization: Bearer ${SMITHERY_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{}'
+
+      - name: Publish local stdio server to Smithery
+        env:
+          SMITHERY_NAMESPACE: ${{ vars.SMITHERY_NAMESPACE }}
+        run: |
+          NAMESPACE="${SMITHERY_NAMESPACE:-stoat-I3tM}"
           npx -y @smithery/cli publish \
             src/smithery.ts \
-            --name @clssck/dataiku-mcp \
+            --name @"${NAMESPACE}"/dataiku-mcp \
             --transport stdio \
             --key "${{ secrets.SMITHERY_API_KEY }}"
