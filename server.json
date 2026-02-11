@@ -3,7 +3,7 @@
   "name": "io.github.clssck/dataiku-mcp",
   "title": "Dataiku MCP",
   "description": "MCP server for Dataiku DSS project, flow, and operations APIs.",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "repository": {
     "source": "github",
     "url": "https://github.com/clssck/Dataiku_MCP",
@@ -14,7 +14,7 @@
     {
       "registryType": "npm",
       "identifier": "dataiku-mcp",
-      "version": "1.0.6",
+      "version": "1.0.7",
       "transport": {
         "type": "stdio"
       },

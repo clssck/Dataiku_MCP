@@ -242,6 +242,18 @@ describe("Tool Errors And Summaries", () => {
 		expect(text).toContain("datasetName and connection are required");
 	});
 
+	it("dataset preview rejects negative limits at schema level", async () => {
+		const { text, isError } = await callTool(registerDatasets, "dataset", {
+			action: "preview",
+			projectKey: "PROJ",
+			datasetName: "orders",
+			limit: -1,
+		});
+
+		expect(isError).toBe(true);
+		expect(text).toMatch(/limit|greater than or equal to 1/i);
+	});
+
 	it("recipe create errors when required fields are missing", async () => {
 		const { text, isError } = await callTool(registerRecipes, "recipe", {
 			action: "create",

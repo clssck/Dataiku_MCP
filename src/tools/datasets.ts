@@ -19,47 +19,276 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 	return value as Record<string, unknown>;
 }
 
-function tsvToCsvTransform(limit: number): Transform {
-	let lineCount = 0;
-	let remainder = "";
+function csvEscape(field: string): string {
+	if (
+		field.includes(",") ||
+		field.includes('"') ||
+		field.includes("\n") ||
+		field.includes("\r") ||
+		field.includes("\t")
+	) {
+		return `"${field.replace(/"/g, '""')}"`;
+	}
+	return field;
+}
+
+interface TsvStreamState {
+	currentField: string;
+	currentRow: string[];
+	inQuotes: boolean;
+	pendingQuoteInQuotes: boolean;
+}
+
+function createTsvStreamState(): TsvStreamState {
+	return {
+		currentField: "",
+		currentRow: [],
+		inQuotes: false,
+		pendingQuoteInQuotes: false,
+	};
+}
+
+function consumeTsvChunk(
+	text: string,
+	state: TsvStreamState,
+	onRow: (row: string[]) => void,
+): void {
+	let i = 0;
+
+	if (state.pendingQuoteInQuotes) {
+		state.pendingQuoteInQuotes = false;
+		const first = text[0];
+		if (first === '"') {
+			state.currentField += '"';
+			i = 1;
+		} else if (first === "\t" || first === "\n" || first === "\r") {
+			state.inQuotes = false;
+		} else if (first !== undefined) {
+			// Ambiguous terminal quote from previous chunk; keep it as data.
+			state.currentField += '"';
+		}
+	}
+
+	for (; i < text.length; i++) {
+		const ch = text[i];
+
+		if (state.inQuotes) {
+			if (ch === '"') {
+				const next = text[i + 1];
+				if (next === '"') {
+					state.currentField += '"';
+					i++;
+					continue;
+				}
+				if (next === undefined) {
+					state.pendingQuoteInQuotes = true;
+					continue;
+				}
+				if (next === "\t" || next === "\n" || next === "\r") {
+					state.inQuotes = false;
+					continue;
+				}
+				// Quote in the middle of quoted field text — keep it literal.
+				state.currentField += '"';
+				continue;
+			}
+			state.currentField += ch;
+			continue;
+		}
+
+		if (ch === '"' && state.currentField.length === 0) {
+			state.inQuotes = true;
+			continue;
+		}
+		if (ch === "\t") {
+			state.currentRow.push(state.currentField);
+			state.currentField = "";
+			continue;
+		}
+		if (ch === "\n") {
+			state.currentRow.push(state.currentField);
+			state.currentField = "";
+			const row = state.currentRow;
+			state.currentRow = [];
+			onRow(row);
+			continue;
+		}
+		if (ch === "\r") {
+			continue;
+		}
+
+		state.currentField += ch;
+	}
+}
+
+function flushTsvStream(
+	state: TsvStreamState,
+	onRow: (row: string[]) => void,
+): void {
+	if (state.pendingQuoteInQuotes) {
+		state.currentField += '"';
+		state.pendingQuoteInQuotes = false;
+	}
+	if (state.currentField.length === 0 && state.currentRow.length === 0) return;
+	state.currentRow.push(state.currentField);
+	state.currentField = "";
+	const row = state.currentRow;
+	state.currentRow = [];
+	onRow(row);
+}
+
+function rowToCsv(row: string[]): string {
+	return row.map((field) => csvEscape(field)).join(",");
+}
+
+function isBlankRow(row: string[]): boolean {
+	return row.length === 1 && row[0].length === 0;
+}
+
+function emitCsvLineWithLimit(
+	row: string[],
+	maxDataRows: number,
+	emittedRows: { value: number },
+	onLine: (line: string) => void,
+): boolean {
+	if (isBlankRow(row)) return false;
+
+	const isHeader = emittedRows.value === 0;
+	if (!isHeader && emittedRows.value - 1 >= maxDataRows) {
+		return true;
+	}
+
+	onLine(rowToCsv(row));
+	emittedRows.value += 1;
+
+	if (!isHeader && emittedRows.value - 1 >= maxDataRows) {
+		return true;
+	}
+	return false;
+}
+
+async function collectPreviewCsv(
+	body: ReadableStream<Uint8Array>,
+	maxDataRows: number,
+): Promise<string> {
+	const state = createTsvStreamState();
+	const emittedRows = { value: 0 };
+	const lines: string[] = [];
+	let done = false;
+
+	const nodeStream = Readable.fromWeb(
+		body as import("stream/web").ReadableStream,
+	);
+	for await (const chunk of nodeStream) {
+		if (done) break;
+		consumeTsvChunk(Buffer.from(chunk).toString("utf-8"), state, (row) => {
+			if (done) return;
+			done = emitCsvLineWithLimit(row, maxDataRows, emittedRows, (line) => {
+				lines.push(line);
+			});
+		});
+		if (done) {
+			nodeStream.destroy();
+			break;
+		}
+	}
+
+	if (!done) {
+		flushTsvStream(state, (row) => {
+			if (done) return;
+			done = emitCsvLineWithLimit(row, maxDataRows, emittedRows, (line) => {
+				lines.push(line);
+			});
+		});
+	}
+
+	return lines.join("\n");
+}
+
+function tsvToCsvTransform(maxDataRows: number): Transform {
+	const state = createTsvStreamState();
+	const emittedRows = { value: 0 };
+	let done = false;
+	const maxRows = Math.max(1, maxDataRows);
 
 	return new Transform({
 		transform(chunk: Buffer, _encoding, callback) {
-			const data = remainder + chunk.toString("utf-8");
-			const lines = data.split("\n");
-			remainder = lines.pop() ?? "";
-
-			for (const line of lines) {
-				if (lineCount > limit) break;
-				if (line === "") continue;
-				this.push(`${tsvLineToCSV(line)}\n`);
-				lineCount++;
+			if (done) {
+				callback();
+				return;
 			}
 
-			if (lineCount > limit) {
+			consumeTsvChunk(chunk.toString("utf-8"), state, (row) => {
+				if (done) return;
+				done = emitCsvLineWithLimit(row, maxRows, emittedRows, (line) => {
+					this.push(`${line}\n`);
+				});
+			});
+
+			if (done) {
 				this.push(null);
 			}
 			callback();
 		},
 		flush(callback) {
-			if (remainder && lineCount <= limit) {
-				this.push(`${tsvLineToCSV(remainder)}\n`);
+			if (done) {
+				callback();
+				return;
 			}
+
+			flushTsvStream(state, (row) => {
+				if (done) return;
+				done = emitCsvLineWithLimit(row, maxRows, emittedRows, (line) => {
+					this.push(`${line}\n`);
+				});
+			});
 			callback();
 		},
 	});
 }
 
 export function tsvLineToCSV(line: string): string {
-	return line
-		.split("\t")
-		.map((field) => {
-			if (field.includes(",") || field.includes('"') || field.includes("\n")) {
-				return `"${field.replace(/"/g, '""')}"`;
+	const fields: string[] = [];
+	let field = "";
+	let inQuotes = false;
+
+	for (let i = 0; i < line.length; i++) {
+		const ch = line[i];
+
+		if (inQuotes) {
+			const next = line[i + 1];
+			if (ch === '"' && next === '"') {
+				field += '"';
+				i++;
+				continue;
 			}
-			return field;
-		})
-		.join(",");
+			if (
+				ch === '"' &&
+				(next === "\t" || next === "\r" || next === undefined)
+			) {
+				inQuotes = false;
+				continue;
+			}
+			field += ch;
+			continue;
+		}
+		if (ch === '"' && field.length === 0) {
+			inQuotes = true;
+			continue;
+		}
+		if (ch === "\t") {
+			fields.push(field);
+			field = "";
+			continue;
+		}
+		if (ch === "\r") {
+			continue;
+		}
+		field += ch;
+	}
+
+	fields.push(field);
+	return rowToCsv(fields);
 }
 
 export function register(server: McpServer) {
@@ -90,6 +319,7 @@ export function register(server: McpServer) {
 				limit: z
 					.number()
 					.int()
+					.min(1)
 					.optional()
 					,
 				outputDir: z
@@ -332,34 +562,14 @@ export function register(server: McpServer) {
 			}
 
 			if (action === "preview") {
-				const previewLimit = Math.min(limit ?? 20, 500);
+				const previewLimit = Math.max(1, Math.min(limit ?? 20, 500));
 				const res = await stream(
 					`/public/api/projects/${enc}/datasets/${dsEnc}/data/?format=tsv-excel-header`,
 				);
-
-				const nodeStream = Readable.fromWeb(
-					res.body as import("stream/web").ReadableStream,
+				const csv = await collectPreviewCsv(
+					res.body as ReadableStream<Uint8Array>,
+					previewLimit,
 				);
-				const chunks: Buffer[] = [];
-				const maxLines = previewLimit + 1; // header + N rows
-				let lineCount = 0;
-
-				for await (const chunk of nodeStream) {
-					chunks.push(Buffer.from(chunk));
-					const text = Buffer.concat(chunks).toString("utf-8");
-					lineCount = text.split("\n").filter((l) => l).length;
-					if (lineCount >= maxLines) {
-						nodeStream.destroy();
-						break;
-					}
-				}
-
-				const lines = Buffer.concat(chunks)
-					.toString("utf-8")
-					.split("\n")
-					.filter((l) => l)
-					.slice(0, maxLines);
-				const csv = lines.map((l) => tsvLineToCSV(l)).join("\n");
 				return {
 					content: [{ type: "text", text: csv || "No data." }],
 				};
@@ -396,7 +606,7 @@ export function register(server: McpServer) {
 			}
 
 			// action === "download"
-			const downloadLimit = limit ?? 100_000;
+			const downloadLimit = Math.max(1, limit ?? 100_000);
 			const res = await stream(
 				`/public/api/projects/${enc}/datasets/${dsEnc}/data/?format=tsv-excel-header`,
 			);

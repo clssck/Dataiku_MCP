@@ -214,6 +214,43 @@ describe("Tool Behavior Coverage", () => {
 		);
 	});
 
+	it("recipe create auto-creates outputs using inferred connection dataset type", async () => {
+		clientMocks.get.mockResolvedValue([
+			{
+				name: "orders_input",
+				type: "Snowflake",
+				managed: false,
+				params: { connection: "snowflake_main", schema: "PUBLIC" },
+			},
+		]);
+		clientMocks.post.mockResolvedValue({});
+
+		const { text, isError } = await callTool(registerRecipes, "recipe", {
+			action: "create",
+			projectKey: "PROJ",
+			type: "sql_query",
+			inputDatasets: ["orders_input"],
+			outputDataset: "orders_enriched",
+			outputConnection: "snowflake_main",
+		});
+
+		expect(isError).toBeFalsy();
+		expect(text).toContain('Recipe "sql_query_orders_enriched" created.');
+		expect(clientMocks.post).toHaveBeenCalledWith(
+			"/public/api/projects/PROJ/datasets/",
+			expect.objectContaining({
+				name: "orders_enriched",
+				type: "Snowflake",
+				params: expect.objectContaining({
+					connection: "snowflake_main",
+					mode: "table",
+					table: "orders_enriched",
+					schema: "PUBLIC",
+				}),
+			}),
+		);
+	});
+
 	it("project map returns raw graph when includeRaw is true", async () => {
 		clientMocks.get.mockImplementation(async (path: string) => {
 			if (path.endsWith("/flow/graph/")) {

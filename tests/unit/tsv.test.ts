@@ -13,7 +13,7 @@ describe("tsvLineToCSV", () => {
 	});
 
 	it("quotes and escapes fields containing double quotes", () => {
-		expect(tsvLineToCSV('alice\t"Bob"\t30')).toBe('alice,"""Bob""",30');
+		expect(tsvLineToCSV('alice\t"""Bob"""\t30')).toBe('alice,"""Bob""",30');
 	});
 
 	it("quotes fields containing newlines", () => {
@@ -35,5 +35,10 @@ describe("tsvLineToCSV", () => {
 		const result = tsvLineToCSV(input);
 		// Each field should be quoted
 		expect(result).toBe('"has,comma","has""quote","has\nnewline"');
+	});
+
+	it("preserves tabs inside quoted TSV fields", () => {
+		const input = 'left\t"has\ttab"\tright';
+		expect(tsvLineToCSV(input)).toBe('left,"has\ttab",right');
 	});
 });

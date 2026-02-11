@@ -118,16 +118,21 @@ export function register(server: McpServer) {
 				}
 
 				// Resolve output connection — explicit, or auto-detect from existing datasets
+				const existingDs = await get<
+					Array<{
+						name: string;
+						type?: string;
+						params?: {
+							connection?: string;
+							schema?: string;
+							catalog?: string;
+						};
+						managed?: boolean;
+					}>
+				>(`/public/api/projects/${enc}/datasets/`);
+
 				let outputConnection = asString(raw.outputConnection);
 				if (!outputConnection) {
-					const existingDs = await get<
-						Array<{
-							name: string;
-							params?: { connection?: string };
-							managed?: boolean;
-						}>
-					>(`/public/api/projects/${enc}/datasets/`);
-
 					const managedDs = existingDs.find(
 						(d) => d.managed && d.params?.connection,
 					);
@@ -139,10 +144,11 @@ export function register(server: McpServer) {
 				// Auto-create missing output datasets
 				const createdDatasets: string[] = [];
 				if (outputConnection) {
-					const existingDs = await get<Array<{ name: string }>>(
-						`/public/api/projects/${enc}/datasets/`,
-					);
 					const existingNames = new Set(existingDs.map((d) => d.name));
+					const connectionSample = existingDs.find(
+						(d) => d.params?.connection === outputConnection && d.type,
+					);
+					const inferredOutputType = connectionSample?.type ?? "Filesystem";
 
 					const outputRoles = outputs as Record<
 						string,
@@ -151,28 +157,50 @@ export function register(server: McpServer) {
 					for (const role of Object.values(outputRoles)) {
 						for (const item of role.items ?? []) {
 							if (item.ref && !existingNames.has(item.ref)) {
-								await post(`/public/api/projects/${enc}/datasets/`, {
-									projectKey: pk,
-									name: item.ref,
-									type: "Filesystem",
-									params: {
-										connection: outputConnection,
-										path: `\${projectKey}/${item.ref}`,
-									},
-									formatType: "csv",
-									formatParams: {
-										style: "excel",
-										charset: "utf8",
-										separator: "\t",
-										quoteChar: '"',
-										escapeChar: "\\",
-										dateSerializationFormat: "ISO",
-										arrayMapFormat: "json",
-										parseHeaderRow: true,
-										compress: "gz",
-									},
-									managed: true,
-								});
+								const datasetBody: Record<string, unknown> =
+									inferredOutputType === "Filesystem"
+										? {
+											projectKey: pk,
+											name: item.ref,
+											type: inferredOutputType,
+											params: {
+												connection: outputConnection,
+												path: `\${projectKey}/${item.ref}`,
+											},
+											formatType: "csv",
+											formatParams: {
+												style: "excel",
+												charset: "utf8",
+												separator: "\t",
+												quoteChar: '"',
+												escapeChar: "\\",
+												dateSerializationFormat: "ISO",
+												arrayMapFormat: "json",
+												parseHeaderRow: true,
+												compress: "gz",
+											},
+											managed: true,
+										}
+										: {
+											projectKey: pk,
+											name: item.ref,
+											type: inferredOutputType,
+											params: {
+												connection: outputConnection,
+												mode: "table",
+												table: item.ref,
+												...(connectionSample?.params?.schema
+													? { schema: connectionSample.params.schema }
+													: {}),
+												...(connectionSample?.params?.catalog
+													? { catalog: connectionSample.params.catalog }
+													: {}),
+											},
+											managed: connectionSample?.managed ?? false,
+										};
+
+								await post(`/public/api/projects/${enc}/datasets/`, datasetBody);
+								existingNames.add(item.ref);
 								createdDatasets.push(item.ref);
 							}
 						}
