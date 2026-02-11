@@ -15,10 +15,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Ensure server.json versions match tag
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Ensure server.json versions match package.json
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="$(node -p "require('./package.json').version")"
           jq --arg v "$VERSION" '.version = $v | .packages = (.packages | map(if .registryType == "npm" then .version = $v else . end))' server.json > server.tmp
           mv server.tmp server.json
 
