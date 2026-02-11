@@ -18,8 +18,14 @@ const clientMocks = vi.hoisted(() => ({
 vi.mock("../../src/client.js", () => clientMocks);
 
 import { register as registerDatasets } from "../../src/tools/datasets.js";
+import { register as registerCodeEnvs } from "../../src/tools/code-envs.js";
+import { register as registerConnections } from "../../src/tools/connections.js";
+import { register as registerFolders } from "../../src/tools/folders.js";
+import { register as registerJobs } from "../../src/tools/jobs.js";
 import { register as registerProjects } from "../../src/tools/projects.js";
 import { register as registerRecipes } from "../../src/tools/recipes.js";
+import { register as registerScenarios } from "../../src/tools/scenarios.js";
+import { register as registerVariables } from "../../src/tools/variables.js";
 
 async function callTool(
 	registerTool: (server: McpServer) => void,
@@ -97,6 +103,50 @@ describe("Tool Behavior Coverage", () => {
 		expect(text).toBe("a,b\n1,2");
 		expect(clientMocks.stream).toHaveBeenCalledWith(
 			"/public/api/projects/PROJ/datasets/sample_ds/data/?format=tsv-excel-header",
+		);
+	});
+
+	it("dataset update deep-merges nested params without dropping existing keys", async () => {
+		clientMocks.get.mockResolvedValue({
+			name: "orders_ds",
+			params: {
+				connection: "snowflake_main",
+				table: "ORDERS",
+				schema: "PUBLIC",
+			},
+			formatParams: {
+				separator: ",",
+				charset: "utf8",
+			},
+		});
+		clientMocks.put.mockResolvedValue({});
+
+		const { text, isError } = await callTool(registerDatasets, "dataset", {
+			action: "update",
+			projectKey: "PROJ",
+			datasetName: "orders_ds",
+			data: {
+				params: {
+					schema: "ANALYTICS",
+				},
+			},
+		});
+
+		expect(isError).toBeFalsy();
+		expect(text).toContain('Dataset "orders_ds" updated.');
+		expect(clientMocks.put).toHaveBeenCalledWith(
+			"/public/api/projects/PROJ/datasets/orders_ds",
+			expect.objectContaining({
+				params: {
+					connection: "snowflake_main",
+					table: "ORDERS",
+					schema: "ANALYTICS",
+				},
+				formatParams: {
+					separator: ",",
+					charset: "utf8",
+				},
+			}),
 		);
 	});
 
@@ -241,5 +291,151 @@ describe("Tool Behavior Coverage", () => {
 		expect(isError).toBeFalsy();
 		const parsed = JSON.parse(text) as { raw?: unknown };
 		expect(parsed.raw).toBeUndefined();
+	});
+
+	it("connection infer marks connection as managed if any dataset is managed", async () => {
+		clientMocks.get.mockResolvedValue([
+			{
+				name: "inbound_a",
+				type: "Snowflake",
+				managed: false,
+				params: { connection: "warehouse", schema: "RAW" },
+			},
+			{
+				name: "inbound_b",
+				type: "Snowflake",
+				managed: true,
+				params: { connection: "warehouse", schema: "CURATED" },
+			},
+		]);
+
+		const { text, isError } = await callTool(registerConnections, "connection", {
+			action: "infer",
+			projectKey: "PROJ",
+		});
+
+		expect(isError).toBeFalsy();
+		expect(text).toContain("warehouse");
+		expect(text).toContain("managed");
+		expect(text).toContain("RAW");
+		expect(text).toContain("CURATED");
+	});
+
+	it("variable set read-merges standard/local keys before writing", async () => {
+		clientMocks.get.mockResolvedValue({
+			standard: { keep: 1, replace: "old" },
+			local: { localKeep: "x" },
+		});
+		clientMocks.putVoid.mockResolvedValue({});
+
+		const { isError } = await callTool(registerVariables, "variable", {
+			action: "set",
+			projectKey: "PROJ",
+			standard: { replace: "new", added: true },
+			local: { localAdded: 42 },
+		});
+
+		expect(isError).toBeFalsy();
+		expect(clientMocks.putVoid).toHaveBeenCalledWith(
+			"/public/api/projects/PROJ/variables/",
+			{
+				standard: { keep: 1, replace: "new", added: true },
+				local: { localKeep: "x", localAdded: 42 },
+			},
+		);
+	});
+
+	it("scenario update deep-merges nested params", async () => {
+		clientMocks.get.mockResolvedValue({
+			id: "nightly",
+			active: true,
+			params: {
+				steps: [{ type: "build_flowitem" }],
+				triggers: [{ type: "time" }],
+				reporters: [{ type: "mail-scenario" }],
+			},
+		});
+		clientMocks.put.mockResolvedValue({});
+
+		const { text, isError } = await callTool(registerScenarios, "scenario", {
+			action: "update",
+			projectKey: "PROJ",
+			scenarioId: "nightly",
+			data: {
+				params: {
+					triggers: [{ type: "dataset-change" }],
+				},
+			},
+		});
+
+		expect(isError).toBeFalsy();
+		expect(text).toContain('Scenario "nightly" updated.');
+		expect(clientMocks.put).toHaveBeenCalledWith(
+			"/public/api/projects/PROJ/scenarios/nightly/",
+			expect.objectContaining({
+				params: {
+					steps: [{ type: "build_flowitem" }],
+					triggers: [{ type: "dataset-change" }],
+					reporters: [{ type: "mail-scenario" }],
+				},
+			}),
+		);
+	});
+
+	it("job log returns only tail when maxLogLines is set", async () => {
+		clientMocks.getText.mockResolvedValue("l1\nl2\nl3\nl4\nl5");
+
+		const { text, isError } = await callTool(registerJobs, "job", {
+			action: "log",
+			projectKey: "PROJ",
+			jobId: "job_123",
+			maxLogLines: 2,
+		});
+
+		expect(isError).toBeFalsy();
+		expect(text).toContain("showing last 2 of 5 lines");
+		expect(text).toContain("l4\nl5");
+		expect(text).not.toContain("l1");
+	});
+
+	it("managed_folder contents reports file count and metadata", async () => {
+		clientMocks.get.mockResolvedValue({
+			items: [
+				{ path: "a.csv", size: 1536, lastModified: Date.UTC(2026, 0, 5) },
+				{ path: "b.csv", size: 12, lastModified: Date.UTC(2026, 0, 6) },
+			],
+		});
+
+		const { text, isError } = await callTool(registerFolders, "managed_folder", {
+			action: "contents",
+			projectKey: "PROJ",
+			folderId: "folder_1",
+		});
+
+		expect(isError).toBeFalsy();
+		expect(text).toContain("2 files:");
+		expect(text).toContain("a.csv");
+		expect(text).toContain("b.csv");
+	});
+
+	it("code_env get summarizes requested and installed packages", async () => {
+		clientMocks.get.mockResolvedValue({
+			envName: "py39",
+			envLang: "PYTHON",
+			desc: { pythonInterpreter: "PYTHON39" },
+			specPackageList: "pandas\nnumpy",
+			actualPackageList: "numpy==2.0.0\npandas==2.2.1\n",
+		});
+
+		const { text, isError } = await callTool(registerCodeEnvs, "code_env", {
+			action: "get",
+			envLang: "PYTHON",
+			envName: "py39",
+		});
+
+		expect(isError).toBeFalsy();
+		expect(text).toContain("py39 (PYTHON, PYTHON39)");
+		expect(text).toContain("Requested packages:");
+		expect(text).toContain("Installed packages:");
 	});
 });

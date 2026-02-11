@@ -39,6 +39,7 @@ export function register(server: McpServer) {
 				if (existing) {
 					if (ds.type) existing.types.add(ds.type);
 					if (ds.params?.schema) existing.dbSchemas.add(ds.params.schema);
+					existing.managed = existing.managed || (ds.managed ?? false);
 				} else {
 					connectionMap.set(conn, {
 						types: new Set(ds.type ? [ds.type] : []),
@@ -60,12 +61,15 @@ export function register(server: McpServer) {
 			}
 
 			const text = [...connectionMap.entries()]
+				.sort(([a], [b]) => a.localeCompare(b))
 				.map(([name, info]) => {
 					const parts: string[] = [];
-					const types = [...info.types].join("/");
+					const types = [...info.types].sort((a, b) => a.localeCompare(b)).join("/");
 					if (types) parts.push(types);
 					if (info.managed) parts.push("managed");
-					const schemas = [...info.dbSchemas];
+					const schemas = [...info.dbSchemas].sort((a, b) =>
+						a.localeCompare(b),
+					);
 					if (schemas.length > 0) parts.push(`schemas: ${schemas.join(", ")}`);
 					return `• ${name}${parts.length > 0 ? ` (${parts.join(", ")})` : ""}`;
 				})

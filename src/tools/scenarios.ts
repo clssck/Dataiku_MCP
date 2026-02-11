@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { del, get, getProjectKey, post, put } from "../client.js";
+import { deepMerge } from "./deep-merge.js";
 
 const optionalProjectKey = z.string().optional();
 
@@ -250,7 +251,7 @@ export function register(server: McpServer) {
 				const current = await get<Record<string, unknown>>(
 					`/public/api/projects/${enc}/scenarios/${scEnc}/`,
 				);
-				const merged = { ...current, ...args.data };
+				const merged = deepMerge(current, args.data);
 				await put<Record<string, unknown>>(
 					`/public/api/projects/${enc}/scenarios/${scEnc}/`,
 					merged,

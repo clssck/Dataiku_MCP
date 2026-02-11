@@ -235,7 +235,17 @@ async function request<T = unknown>(
 
 	const text = await res.text();
 	if (!text) return undefined as T;
-	return JSON.parse(text) as T;
+	try {
+		return JSON.parse(text) as T;
+	} catch {
+		const summary =
+			text.length > 300 ? `${text.slice(0, 300)}…` : text;
+		throw new DataikuError(
+			res.status,
+			res.statusText || "Invalid JSON response",
+			`Expected JSON response body but got non-JSON content: ${summary}`,
+		);
+	}
 }
 
 export async function get<T = unknown>(path: string): Promise<T> {

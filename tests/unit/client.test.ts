@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { DataikuError, getProjectKey } from "../../src/client.js";
+import { describe, expect, it, vi } from "vitest";
+import { DataikuError, get, getProjectKey } from "../../src/client.js";
 
 describe("DataikuError", () => {
 	it("extracts message from JSON error body", () => {
@@ -107,6 +107,42 @@ describe("getProjectKey", () => {
 				process.env.DATAIKU_PROJECT_KEY = original;
 			} else {
 				delete process.env.DATAIKU_PROJECT_KEY;
+			}
+		}
+	});
+});
+
+describe("request JSON handling", () => {
+	it("throws DataikuError when a successful response is non-JSON", async () => {
+		const originalUrl = process.env.DATAIKU_URL;
+		const originalKey = process.env.DATAIKU_API_KEY;
+		const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response("<html>ok-but-not-json</html>", {
+				status: 200,
+				statusText: "OK",
+			}),
+		);
+
+		process.env.DATAIKU_URL = "https://example.dataiku.io";
+		process.env.DATAIKU_API_KEY = "test-token";
+
+		try {
+			await expect(get("/public/api/projects/")).rejects.toMatchObject({
+				name: "DataikuError",
+				status: 200,
+				category: "unknown",
+			});
+		} finally {
+			fetchSpy.mockRestore();
+			if (originalUrl) {
+				process.env.DATAIKU_URL = originalUrl;
+			} else {
+				delete process.env.DATAIKU_URL;
+			}
+			if (originalKey) {
+				process.env.DATAIKU_API_KEY = originalKey;
+			} else {
+				delete process.env.DATAIKU_API_KEY;
 			}
 		}
 	});
