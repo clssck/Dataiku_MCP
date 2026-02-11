@@ -39,7 +39,3 @@ export function createServer() {
 
 	return server;
 }
-
-export function createSandboxServer() {
-	return createServer();
-}

@@ -92,13 +92,6 @@ jobs:
             --title "${{ steps.version.outputs.tag }}" \
             --generate-notes
 
-      - name: Trigger Smithery publish workflow
-        if: ${{ inputs.publish && vars.SMITHERY_RELEASE_ENABLED != 'false' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BRANCH: ${{ github.ref_name }}
-        run: gh workflow run "Publish to Smithery" --ref "${BRANCH}"
-
       - name: Trigger MCP Registry publish workflow
         if: ${{ inputs.publish && vars.MCP_REGISTRY_ENABLED != 'false' }}
         env:
