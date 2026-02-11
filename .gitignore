@@ -28,3 +28,7 @@ Thumbs.db
 
 # Local agent/client state
 .claude/
+
+# Example script outputs
+examples/output/*
+!examples/output/.gitkeep

@@ -100,10 +100,10 @@ export function register(server: McpServer) {
 					.string()
 					.optional()
 					,
-				data: z
-					.record(z.unknown())
-					.optional()
-					,
+					data: z
+						.record(z.string(), z.unknown())
+						.optional()
+						,
 			}).passthrough(),
 		},
 		async (args) => {

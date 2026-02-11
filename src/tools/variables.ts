@@ -33,14 +33,14 @@ export function register(server: McpServer) {
 			inputSchema: z.object({
 				action: z.enum(["get", "set"]),
 				projectKey: optionalProjectKey,
-				standard: z
-					.record(z.unknown())
-					.optional()
-					,
-				local: z
-					.record(z.unknown())
-					.optional()
-					,
+					standard: z
+						.record(z.string(), z.unknown())
+						.optional()
+						,
+					local: z
+						.record(z.string(), z.unknown())
+						.optional()
+						,
 			}),
 		},
 		async ({ action, projectKey, standard, local }) => {

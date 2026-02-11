@@ -46,6 +46,45 @@ Use directly from npm (after publish):
 npx -y dataiku-mcp
 ```
 
+## Local Build And Testing
+
+Recommended local workflow from repo root:
+
+```bash
+# install deps
+npm ci
+
+# static checks
+npm run check
+
+# unit tests
+npm test
+
+# build distribution
+npm run build
+
+# run MCP server locally (dev)
+npm start
+```
+
+Optional live DSS integration tests:
+
+```bash
+# requires DATAIKU_URL, DATAIKU_API_KEY, DATAIKU_PROJECT_KEY in .env
+npm run test:integration
+
+# includes destructive actions (create/update/delete)
+DATAIKU_MCP_DESTRUCTIVE_TESTS=1 npm run test:integration
+```
+
+## Repository Layout
+
+- `src/`: MCP server and tool implementations.
+- `tests/`: unit + integration test suites.
+- `examples/`: demos, fixtures, artifacts, and ad-hoc local scripts.
+- `bin/`: package executable entrypoint.
+- `dist/`: compiled output (generated).
+
 Create a local env file:
 
 ```bash
@@ -59,24 +98,7 @@ Run directly in dev:
 npm start
 ```
 
-Run tests:
-
-```bash
-npm run check
-npm test
-```
-
-Live integration tests (requires `.env`):
-
-```bash
-npm run test:integration
-```
-
-Optional destructive live suite:
-
-```bash
-DATAIKU_MCP_DESTRUCTIVE_TESTS=1 npm run test:integration
-```
+Example scripts and sample outputs are kept under `examples/` to avoid root-level clutter.
 
 ## Environment Variables
 

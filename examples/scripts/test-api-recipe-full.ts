@@ -1,8 +1,14 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(SCRIPT_DIR, "../..");
+const OUTPUT_FILE = resolve(REPO_ROOT, "examples/output/recipe-definition.json");
 
 // Load .env
 const env: Record<string, string> = {};
-for (const line of readFileSync(".env", "utf-8").split("\n")) {
+for (const line of readFileSync(resolve(REPO_ROOT, ".env"), "utf-8").split("\n")) {
   const match = line.match(/^([^=]+)=(.*)$/);
   if (match) env[match[1]] = match[2];
 }
@@ -35,9 +41,9 @@ async function main() {
   const json = await response.json();
   
   // Save full response to file for inspection
-  const outputFile = "/Users/clssck/Projects/dataiku_mcp_skill/recipe-definition.json";
-  writeFileSync(outputFile, JSON.stringify(json, null, 2));
-  console.log(`\nFull response saved to: ${outputFile}`);
+  mkdirSync(resolve(REPO_ROOT, "examples/output"), { recursive: true });
+  writeFileSync(OUTPUT_FILE, JSON.stringify(json, null, 2));
+  console.log(`\nFull response saved to: ${OUTPUT_FILE}`);
   
   // Print structure summary
   console.log(`\nTop-level keys: ${Object.keys(json).join(", ")}`);

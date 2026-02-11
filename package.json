@@ -1,6 +1,6 @@
 {
   "name": "dataiku-mcp",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "MCP server for Dataiku DSS REST API",
   "type": "module",
   "main": "dist/index.js",
@@ -36,10 +36,10 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
-    "zod": "^3.25.0"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "^25.2.3",
     "tsx": "^4.19.0",
     "typescript": "^5.8.0",
     "vitest": "^4.0.18"

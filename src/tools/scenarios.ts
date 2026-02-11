@@ -40,10 +40,10 @@ export function register(server: McpServer) {
 					.enum(["step_based", "custom_python"])
 					.optional()
 					,
-				data: z
-					.record(z.unknown())
-					.optional()
-					,
+					data: z
+						.record(z.string(), z.unknown())
+						.optional()
+						,
 			}),
 		},
 		async (args) => {

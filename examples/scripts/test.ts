@@ -1,24 +1,33 @@
-import { readFileSync, existsSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { spawn } from "node:child_process";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(SCRIPT_DIR, "../..");
+const OUTPUT_DIR = resolve(REPO_ROOT, "examples/output");
+const RECIPE_OUT = resolve(OUTPUT_DIR, "compute_tx_prepared.json");
+const DATASET_OUT = resolve(OUTPUT_DIR, "cards.csv.gz");
 
 // Load .env
 const env: Record<string, string> = { ...process.env } as Record<string, string>;
-for (const line of readFileSync(".env", "utf-8").split("\n")) {
+for (const line of readFileSync(resolve(REPO_ROOT, ".env"), "utf-8").split("\n")) {
   const match = line.match(/^([^=]+)=(.*)$/);
   if (match) env[match[1]] = match[2];
 }
 
 const server = spawn("npx", ["tsx", "src/index.ts"], {
-  cwd: "/Users/clssck/Projects/dataiku_mcp_skill",
+  cwd: REPO_ROOT,
   env,
   stdio: ["pipe", "pipe", "pipe"],
 });
 
 const PROJECT = env.DATAIKU_PROJECT_KEY || "TUT_VARIABLES";
 const TEST_RECIPE = "__mcp_test_recipe__";
+mkdirSync(OUTPUT_DIR, { recursive: true });
 
 // Cleanup leftover test files
-for (const f of ["compute_tx_prepared.json", `cards.csv.gz`]) {
+for (const f of [RECIPE_OUT, DATASET_OUT]) {
   if (existsSync(f)) unlinkSync(f);
 }
 
@@ -38,8 +47,27 @@ const phases: Call[][] = [
   ],
   // Phase 2: Download tools
   [
-    { id: 10, name: "recipe", arguments: { action: "download", projectKey: PROJECT, recipeName: "compute_tx_prepared" } },
-    { id: 11, name: "dataset", arguments: { action: "download", projectKey: PROJECT, datasetName: "cards", limit: 50 } },
+    {
+      id: 10,
+      name: "recipe",
+      arguments: {
+        action: "download",
+        projectKey: PROJECT,
+        recipeName: "compute_tx_prepared",
+        outputPath: RECIPE_OUT,
+      },
+    },
+    {
+      id: 11,
+      name: "dataset",
+      arguments: {
+        action: "download",
+        projectKey: PROJECT,
+        datasetName: "cards",
+        limit: 50,
+        outputDir: OUTPUT_DIR,
+      },
+    },
   ],
   // Phase 3: Create recipe
   [
@@ -124,16 +152,16 @@ server.stdout.on("data", (chunk: Buffer) => {
     // Post-checks for file downloads
     if (msg.id === 10 && !msg.result.isError) {
       console.log(
-        existsSync("compute_tx_prepared.json")
-          ? "  📁 Verified: compute_tx_prepared.json exists\n"
-          : "  ⚠️  compute_tx_prepared.json NOT found\n",
+        existsSync(RECIPE_OUT)
+          ? `  Verified: ${RECIPE_OUT} exists\n`
+          : `  Missing: ${RECIPE_OUT}\n`,
       );
     }
     if (msg.id === 11 && !msg.result.isError) {
       console.log(
-        existsSync("cards.csv.gz")
-          ? "  📁 Verified: cards.csv.gz exists\n"
-          : "  ⚠️  cards.csv.gz NOT found\n",
+        existsSync(DATASET_OUT)
+          ? `  Verified: ${DATASET_OUT} exists\n`
+          : `  Missing: ${DATASET_OUT}\n`,
       );
     }
 
