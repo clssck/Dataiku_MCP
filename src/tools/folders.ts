@@ -8,6 +8,33 @@ import { del, get, getProjectKey, stream, upload } from "../client.js";
 
 const optionalProjectKey = z.string().optional();
 
+const WINDOWS_RESERVED_FILE_NAMES =
+	/^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])$/i;
+function sanitizeFileName(name: string, fallback: string): string {
+	const sanitized = name
+		.replace(/[<>:"/\\|?*\u0000-\u001F]/g, "_")
+		.replace(/[. ]+$/g, "")
+		.trim();
+	if (!sanitized) return fallback;
+	const dotIndex = sanitized.indexOf(".");
+	const baseName = dotIndex === -1 ? sanitized : sanitized.slice(0, dotIndex);
+	const extension = dotIndex === -1 ? "" : sanitized.slice(dotIndex);
+	if (WINDOWS_RESERVED_FILE_NAMES.test(baseName)) return `${baseName}_${extension}`;
+	return sanitized;
+}
+
+function normalizeRemotePath(path: string): string {
+	return path.replace(/\\/g, "/");
+}
+
+function inferDownloadFileName(remotePath: string): string {
+	const leaf = normalizeRemotePath(remotePath)
+		.split("/")
+		.filter(Boolean)
+		.pop();
+	return sanitizeFileName(leaf ?? "", "download");
+}
+
 export function register(server: McpServer) {
 	server.registerTool(
 		"managed_folder",
@@ -133,7 +160,8 @@ export function register(server: McpServer) {
 					isError: true,
 				};
 			}
-			const pEnc = encodeURIComponent(path);
+			const normalizedPath = normalizeRemotePath(path);
+			const pEnc = encodeURIComponent(normalizedPath);
 
 			if (action === "download") {
 				const res = await stream(
@@ -142,7 +170,7 @@ export function register(server: McpServer) {
 
 				const dest =
 					localPath ??
-					resolve(process.cwd(), path.split("/").pop() ?? "download");
+					resolve(process.cwd(), inferDownloadFileName(normalizedPath));
 				const nodeStream = Readable.fromWeb(
 					res.body as import("stream/web").ReadableStream,
 				);
@@ -150,7 +178,7 @@ export function register(server: McpServer) {
 				await pipeline(nodeStream, fileOut);
 
 				return {
-					content: [{ type: "text", text: `Downloaded "${path}" to ${dest}` }],
+					content: [{ type: "text", text: `Downloaded "${normalizedPath}" to ${dest}` }],
 				};
 			}
 

@@ -10,6 +10,21 @@ import { deepMerge } from "./deep-merge.js";
 
 const optionalProjectKey = z.string().optional();
 
+const WINDOWS_RESERVED_FILE_NAMES =
+	/^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])$/i;
+function sanitizeFileName(name: string, fallback: string): string {
+	const sanitized = name
+		.replace(/[<>:"/\\|?*\u0000-\u001F]/g, "_")
+		.replace(/[. ]+$/g, "")
+		.trim();
+	if (!sanitized) return fallback;
+	const dotIndex = sanitized.indexOf(".");
+	const baseName = dotIndex === -1 ? sanitized : sanitized.slice(0, dotIndex);
+	const extension = dotIndex === -1 ? "" : sanitized.slice(dotIndex);
+	if (WINDOWS_RESERVED_FILE_NAMES.test(baseName)) return `${baseName}_${extension}`;
+	return sanitized;
+}
+
 function asString(value: unknown): string | undefined {
 	return typeof value === "string" && value.length > 0 ? value : undefined;
 }
@@ -612,7 +627,8 @@ export function register(server: McpServer) {
 			);
 
 			const dir = outputDir ?? process.cwd();
-			const filePath = resolve(dir, `${datasetName}.csv.gz`);
+			const safeDatasetName = sanitizeFileName(datasetName, "dataset");
+			const filePath = resolve(dir, `${safeDatasetName}.csv.gz`);
 
 			const nodeStream = Readable.fromWeb(
 				res.body as import("stream/web").ReadableStream,

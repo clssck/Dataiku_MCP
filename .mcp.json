@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "dataiku": {
-      "command": "npx",
-      "args": ["tsx", "src/index.ts"],
+      "command": "node",
+      "args": ["node_modules/tsx/dist/cli.mjs", "src/index.ts"],
       "env": {
         "DATAIKU_URL": "",
         "DATAIKU_API_KEY": "",

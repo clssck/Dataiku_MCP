@@ -6,6 +6,21 @@ import { del, get, getProjectKey, post, put } from "../client.js";
 
 const optionalProjectKey = z.string().optional();
 
+const WINDOWS_RESERVED_FILE_NAMES =
+	/^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])$/i;
+function sanitizeFileName(name: string, fallback: string): string {
+	const sanitized = name
+		.replace(/[<>:"/\\|?*\u0000-\u001F]/g, "_")
+		.replace(/[. ]+$/g, "")
+		.trim();
+	if (!sanitized) return fallback;
+	const dotIndex = sanitized.indexOf(".");
+	const baseName = dotIndex === -1 ? sanitized : sanitized.slice(0, dotIndex);
+	const extension = dotIndex === -1 ? "" : sanitized.slice(dotIndex);
+	if (WINDOWS_RESERVED_FILE_NAMES.test(baseName)) return `${baseName}_${extension}`;
+	return sanitized;
+}
+
 function asString(value: unknown): string | undefined {
 	return typeof value === "string" && value.length > 0 ? value : undefined;
 }
@@ -409,8 +424,9 @@ export function register(server: McpServer) {
 			const recipe = await get<Record<string, unknown>>(
 				`/public/api/projects/${enc}/recipes/${rnEnc}`,
 			);
+			const safeRecipeName = sanitizeFileName(recipeName, "recipe");
 			const filePath =
-				args.outputPath ?? resolve(process.cwd(), `${recipeName}.json`);
+				args.outputPath ?? resolve(process.cwd(), `${safeRecipeName}.json`);
 			await writeFile(filePath, JSON.stringify(recipe, null, 2), "utf-8");
 			return {
 				content: [

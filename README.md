@@ -122,6 +122,20 @@ Use this server command in clients (npm package):
 }
 ```
 
+Windows note: if your MCP client launches commands without a shell, use `npx.cmd`:
+
+```json
+{
+  "command": "npx.cmd",
+  "args": ["-y", "dataiku-mcp"],
+  "env": {
+    "DATAIKU_URL": "https://your-dss-instance.app.dataiku.io",
+    "DATAIKU_API_KEY": "your_api_key",
+    "DATAIKU_PROJECT_KEY": "YOUR_PROJECT_KEY"
+  }
+}
+```
+
 You can also run TypeScript directly during development:
 
 ```json
@@ -206,7 +220,7 @@ Example:
 ### Codex / project-level MCP config
 
 This repo already includes a project-scoped MCP file at `.mcp.json`.
-Update the path/env values and use it directly with Codex-compatible tooling.
+The checked-in `.mcp.json` uses `node node_modules/tsx/dist/cli.mjs src/index.ts` for cross-platform startup (including Windows); run `npm ci` first.
 
 ## NPM Release Workflow
 
