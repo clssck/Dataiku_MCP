@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { del, get, getProjectKey, post, put } from "../client.js";
+import { registerTool } from "./register-tool.js";
 
 const optionalProjectKey = z.string().optional();
 
@@ -37,7 +38,8 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 }
 
 export function register(server: McpServer) {
-	server.registerTool(
+   registerTool(
+      server,
 		"recipe",
 		{
 			description:

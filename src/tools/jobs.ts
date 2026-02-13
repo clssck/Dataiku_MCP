@@ -1,11 +1,13 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { get, getProjectKey, getText, post } from "../client.js";
+import { registerTool } from "./register-tool.js";
 
 const optionalProjectKey = z.string().optional();
 
 export function register(server: McpServer) {
-	server.registerTool(
+   registerTool(
+      server,
 		"job",
 		{
 			description:

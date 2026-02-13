@@ -5,6 +5,7 @@ import { pipeline } from "node:stream/promises";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { del, get, getProjectKey, stream, upload } from "../client.js";
+import { registerTool } from "./register-tool.js";
 
 const optionalProjectKey = z.string().optional();
 
@@ -36,7 +37,8 @@ function inferDownloadFileName(remotePath: string): string {
 }
 
 export function register(server: McpServer) {
-	server.registerTool(
+   registerTool(
+      server,
 		"managed_folder",
 		{
 			description:

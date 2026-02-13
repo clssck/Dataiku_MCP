@@ -180,42 +180,66 @@ export class DataikuError extends Error {
 
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 2000;
+const MAX_BACKOFF_DELAY_MS = 30_000;
 
+function readPositiveIntEnv(name: string, fallback: number): number {
+   const raw = process.env[name];
+   if (!raw) return fallback;
+   const parsed = Number.parseInt(raw, 10);
+   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+   return parsed;
+}
+
+const REQUEST_TIMEOUT_MS = readPositiveIntEnv("DATAIKU_REQUEST_TIMEOUT_MS", 30_000);
 function isTransientError(status: number, body: string): boolean {
 	return classifyDataikuError(status, body).category === "transient";
 }
-
 function sleep(ms: number): Promise<void> {
 	return new Promise((r) => setTimeout(r, ms));
 }
 
+function computeBackoffDelayMs(attempt: number): number {
+   const cap = Math.min(MAX_BACKOFF_DELAY_MS, BASE_DELAY_MS * 2 ** attempt);
+   return Math.floor(Math.random() * (cap + 1));
+}
 async function fetchWithRetry(
 	url: string,
 	init: RequestInit,
 ): Promise<Response> {
 	for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-		try {
-			const res = await fetch(url, init);
+      let timedOut = false;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => {
+         timedOut = true;
+         controller.abort();
+      }, REQUEST_TIMEOUT_MS);
 
+      try {
+         const res = await fetch(url, { ...init, signal: controller.signal });
 			if (!res.ok) {
 				const text = await res.text();
 				if (attempt < MAX_RETRIES && isTransientError(res.status, text)) {
-					await sleep(BASE_DELAY_MS * 2 ** attempt);
+               await sleep(computeBackoffDelayMs(attempt));
 					continue;
 				}
 				throw new DataikuError(res.status, res.statusText, text);
 			}
-
 			return res;
 		} catch (error) {
 			if (error instanceof DataikuError) throw error;
 			if (attempt < MAX_RETRIES) {
-				await sleep(BASE_DELAY_MS * 2 ** attempt);
+            await sleep(computeBackoffDelayMs(attempt));
 				continue;
 			}
-			const detail =
-				error instanceof Error ? error.message : "Unknown transport error";
-			throw new DataikuError(0, "Network Error", detail);
+         const detail = timedOut
+            ? `Request timed out after ${REQUEST_TIMEOUT_MS}ms`
+            : error instanceof Error
+               ? error.message
+               : "Unknown transport error";
+         const statusText = timedOut ? "Request Timeout" : "Network Error";
+         throw new DataikuError(0, statusText, detail);
+      } finally {
+         clearTimeout(timeout);
 		}
 	}
 	throw new Error("Request failed after retries");

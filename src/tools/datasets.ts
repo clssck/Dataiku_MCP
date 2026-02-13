@@ -7,6 +7,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { del, get, getProjectKey, post, put, stream } from "../client.js";
 import { deepMerge } from "./deep-merge.js";
+import { registerTool } from "./register-tool.js";
 
 const optionalProjectKey = z.string().optional();
 
@@ -307,7 +308,8 @@ export function tsvLineToCSV(line: string): string {
 }
 
 export function register(server: McpServer) {
-	server.registerTool(
+   registerTool(
+      server,
 		"dataset",
 		{
 			description:

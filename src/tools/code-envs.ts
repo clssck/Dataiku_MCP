@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { get } from "../client.js";
+import { registerTool } from "./register-tool.js";
 
 function summarizeItems(
 	label: string,
@@ -14,7 +15,8 @@ function summarizeItems(
 }
 
 export function register(server: McpServer) {
-	server.registerTool(
+   registerTool(
+      server,
 		"code_env",
 		{
 			description:
