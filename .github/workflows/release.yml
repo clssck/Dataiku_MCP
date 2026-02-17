@@ -66,11 +66,17 @@ jobs:
         id: version
         run: |
           if [ -n "${{ inputs.version }}" ]; then
-            npm version "${{ inputs.version }}" -m "chore(release): %s [skip ci]"
+            npm version "${{ inputs.version }}" --no-git-tag-version
           else
-            npm version "${{ inputs.bump }}" -m "chore(release): %s [skip ci]"
+            npm version "${{ inputs.bump }}" --no-git-tag-version
           fi
           VERSION="$(npm pkg get version | tr -d '\"')"
+          jq --arg v "$VERSION" '.version = $v | .packages = (.packages | map(if .registryType == "npm" then .version = $v else . end))' server.json > server.tmp
+          mv server.tmp server.json
+          npm run check:metadata
+          git add package.json package-lock.json server.json
+          git commit -m "chore(release): ${VERSION} [skip ci]"
+          git tag "v${VERSION}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
 
