@@ -76,7 +76,7 @@ jobs:
           npm run check:metadata
           git add package.json package-lock.json server.json
           git commit -m "chore(release): ${VERSION} [skip ci]"
-          git tag "v${VERSION}"
+          git tag -a "v${VERSION}" -m "v${VERSION}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
 
