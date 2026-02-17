@@ -87,11 +87,19 @@ const phases: Call[][] = [
   ],
   // Phase 4: Get recipe we just created
   [
-    { id: 13, name: "recipe", arguments: { action: "get", projectKey: PROJECT, recipeName: TEST_RECIPE } },
+    {
+      id: 13,
+      name: "recipe",
+      arguments: { action: "get", projectKey: PROJECT, recipeName: TEST_RECIPE },
+    },
   ],
   // Phase 5: Delete the test recipe
   [
-    { id: 14, name: "recipe", arguments: { action: "delete", projectKey: PROJECT, recipeName: TEST_RECIPE } },
+    {
+      id: 14,
+      name: "recipe",
+      arguments: { action: "delete", projectKey: PROJECT, recipeName: TEST_RECIPE },
+    },
   ],
 ];
 
@@ -108,12 +116,12 @@ function sendPhase(phaseIndex: number) {
   pendingInPhase = calls.length;
   for (const call of calls) {
     server.stdin.write(
-      JSON.stringify({
+      `${JSON.stringify({
         jsonrpc: "2.0",
         id: call.id,
         method: "tools/call",
         params: { name: call.name, arguments: call.arguments },
-      }) + "\n",
+      })}\n`,
     );
   }
 }
@@ -145,7 +153,7 @@ server.stdout.on("data", (chunk: Buffer) => {
       console.log(`❌ ${label}: ${msg.result.content?.[0]?.text ?? "error"}\n`);
     } else {
       const text = msg.result.content?.[0]?.text ?? "";
-      const display = text.length > 500 ? text.slice(0, 500) + "\n  ... (truncated)" : text;
+      const display = text.length > 500 ? `${text.slice(0, 500)}\n  ... (truncated)` : text;
       console.log(`✅ ${label}:\n  ${display.replace(/\n/g, "\n  ")}\n`);
     }
 
@@ -199,5 +207,5 @@ const initMessages = [
 ];
 
 for (const msg of initMessages) {
-  server.stdin.write(JSON.stringify(msg) + "\n");
+  server.stdin.write(`${JSON.stringify(msg)}\n`);
 }

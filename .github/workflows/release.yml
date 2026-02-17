@@ -53,6 +53,7 @@ jobs:
       - name: Validate build and tests
         run: |
           npm run check
+          npm run check:metadata
           npm test
           npm run build
 

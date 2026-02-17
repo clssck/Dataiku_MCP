@@ -30,16 +30,23 @@
     "start": "npx tsx src/index.ts",
     "build": "tsc",
     "check": "tsc --noEmit",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "biome:check": "biome check .",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "vitest run --project integration",
-    "prepublishOnly": "npm run check && npm test && npm run build"
+    "check:metadata": "node scripts/check-server-json-sync.mjs",
+    "prepublishOnly": "npm run check && npm run check:metadata && npm test && npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.3.15",
     "@types/node": "^25.2.3",
     "tsx": "^4.19.0",
     "typescript": "^5.8.0",

@@ -14,7 +14,7 @@ MCP server for Dataiku DSS REST APIs, focused on flow analysis and reliable day-
 - `project`: `list`, `get`, `metadata`, `flow`, `map`
 - `dataset`: `list`, `get`, `schema`, `preview`, `metadata`, `download`, `create`, `update`, `delete`
 - `recipe`: `list`, `get`, `create`, `update`, `delete`, `download`
-- `job`: `list`, `get`, `log`, `build`, `abort`
+- `job`: `list`, `get`, `log`, `build`, `buildAndWait`, `wait`, `abort`
 - `scenario`: `list`, `run`, `status`, `get`, `create`, `update`, `delete`
 - `managed_folder`: `list`, `get`, `contents`, `download`, `upload`, `delete_file`
 - `variable`: `get`, `set`
@@ -105,6 +105,9 @@ Example scripts and sample outputs are kept under `examples/` to avoid root-leve
 - `DATAIKU_URL`: DSS base URL
 - `DATAIKU_API_KEY`: DSS API key
 - `DATAIKU_PROJECT_KEY` (optional): default project key
+- `DATAIKU_REQUEST_TIMEOUT_MS` (optional): per-attempt request timeout in milliseconds (default: `30000`)
+- `DATAIKU_RETRY_MAX_ATTEMPTS` (optional): max attempts for retry-enabled requests (`GET` only, default: `4`, cap: `10`)
+- `DATAIKU_DEBUG_LATENCY` (optional): set to `1`/`true` to include per-tool timing diagnostics in `structuredContent.debug.latency` (off by default)
 
 ## MCP Client Setup Guide
 
@@ -285,14 +288,19 @@ Validation notes:
 
 After adding the server in a client, run:
 
-- `project` with `{ "action": "map", "projectKey": "YOUR_PROJECT_KEY" }`
+- `project` with `{ "action": "map", "projectKey": "YOUR_PROJECT_KEY" }` (defaults to `maxNodes=300`, `maxEdges=600`; override as needed)
 
-You should receive normalized `nodes`, `edges`, `stats`, `roots`, and `leaves`.
+You should receive a flow summary in text and normalized `nodes`, `edges`, `stats`, `roots`, and `leaves` under `structuredContent.map`.
+When truncation limits are applied (default `maxNodes=300`, `maxEdges=600`), `structuredContent.truncation` reports before/after node+edge counts and whether truncation occurred.
 
 ## Notes
 
-- `project.map` keeps `includeRaw` off by default for lower token usage.
+- `project.map` returns a compact text summary; full normalized graph is in `structuredContent.map`.
 - Arrays in normalized map output are deterministically sorted to reduce diff churn.
+- `job.wait` and `job.buildAndWait` include `structuredContent.normalizedState` with one of `terminalSuccess | terminalFailure | timeout | nonTerminal` while preserving raw DSS `state`.
+- With `DATAIKU_DEBUG_LATENCY=1`, responses include per-tool and per-API-call latency metrics under `structuredContent.debug.latency`.
+- List-style responses are token-bounded by default; use `limit`/`offset` (and action-specific caps like `maxNodes`, `maxEdges`, `maxKeys`, `maxPackages`) to page or expand results when needed.
+- `dataset.get` and `job.get` are summary-first by default; pass `includeDefinition=true` to include full DSS JSON in `structuredContent.definition`.
 
 ## Sources
 

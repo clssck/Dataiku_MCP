@@ -76,8 +76,8 @@ async function testEndpoint(endpoint: TestEndpoint): Promise<void> {
     console.log(`Content-Type: ${response.headers.get("content-type") || "not set"}`);
 
     const text = await response.text();
-    const preview = text.length > 500 ? text.slice(0, 500) + "\n... (truncated)" : text;
-    
+    const preview = text.length > 500 ? `${text.slice(0, 500)}\n... (truncated)` : text;
+
     console.log(`\nResponse body (${text.length} chars):`);
     console.log(preview);
 
@@ -86,7 +86,7 @@ async function testEndpoint(endpoint: TestEndpoint): Promise<void> {
       try {
         const json = JSON.parse(text);
         console.log("\nParsed JSON keys:", Object.keys(json).join(", "));
-      } catch (e) {
+      } catch (_e) {
         console.log("\nCould not parse as JSON");
       }
     }
