@@ -4,6 +4,25 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const clientMocks = vi.hoisted(() => ({
+  DataikuError: class DataikuError extends Error {
+    category: "validation" | "not_found" | "unknown" = "validation";
+    retryable = false;
+    retryHint = "";
+    retry?: unknown;
+
+    constructor(
+      public status: number,
+      public statusText: string,
+      public body: string,
+      retry?: unknown,
+    ) {
+      super(body);
+      this.name = "DataikuError";
+      this.retry = retry;
+      if (status === 404) this.category = "not_found";
+      else if (status >= 500) this.category = "unknown";
+    }
+  },
   del: vi.fn(),
   get: vi.fn(),
   getProjectKey: vi.fn((projectKey?: string) => projectKey ?? "TEST_PROJECT"),
@@ -16,10 +35,10 @@ const clientMocks = vi.hoisted(() => ({
 
 vi.mock("../../src/client.js", () => clientMocks);
 
-import { register as registerDatasets } from "../../src/tools/datasets.js";
 import { register as registerCodeEnvs } from "../../src/tools/code-envs.js";
+import { register as registerDatasets } from "../../src/tools/datasets.js";
 import { register as registerFolders } from "../../src/tools/folders.js";
-import { register as registerJobs } from "../../src/tools/jobs.js";
+import { computeNextPollDelayMs, register as registerJobs } from "../../src/tools/jobs.js";
 import { register as registerProjects } from "../../src/tools/projects.js";
 import { register as registerRecipes } from "../../src/tools/recipes.js";
 import { register as registerScenarios } from "../../src/tools/scenarios.js";
@@ -68,6 +87,33 @@ describe("Pagination + wait/buildAndWait behavior", () => {
     clientMocks.getProjectKey.mockImplementation(
       (projectKey?: string) => projectKey ?? "TEST_PROJECT",
     );
+  });
+
+  it("computeNextPollDelayMs backs off every three polls when adaptive polling is enabled", () => {
+    expect(
+      computeNextPollDelayMs({ pollCount: 1, baseIntervalMs: 2_000, adaptiveEnabled: true }),
+    ).toBe(2_000);
+    expect(
+      computeNextPollDelayMs({ pollCount: 3, baseIntervalMs: 2_000, adaptiveEnabled: true }),
+    ).toBe(2_000);
+    expect(
+      computeNextPollDelayMs({ pollCount: 4, baseIntervalMs: 2_000, adaptiveEnabled: true }),
+    ).toBe(4_000);
+    expect(
+      computeNextPollDelayMs({ pollCount: 7, baseIntervalMs: 2_000, adaptiveEnabled: true }),
+    ).toBe(8_000);
+    expect(
+      computeNextPollDelayMs({ pollCount: 10, baseIntervalMs: 2_000, adaptiveEnabled: true }),
+    ).toBe(10_000);
+  });
+
+  it("computeNextPollDelayMs keeps the base interval when adaptive polling is disabled", () => {
+    expect(
+      computeNextPollDelayMs({ pollCount: 1, baseIntervalMs: 750, adaptiveEnabled: false }),
+    ).toBe(750);
+    expect(
+      computeNextPollDelayMs({ pollCount: 12, baseIntervalMs: 750, adaptiveEnabled: false }),
+    ).toBe(750);
   });
 
   it("project list supports query + offset + limit with structured page metadata", async () => {
@@ -260,6 +306,26 @@ describe("Pagination + wait/buildAndWait behavior", () => {
     expect(result.structured?.filtered).toBe(3);
     expect(result.structured?.offset).toBe(1);
     expect(result.structured?.limit).toBe(1);
+  });
+
+  it("job list pushes limit to DSS when offset and query are absent", async () => {
+    clientMocks.get.mockResolvedValue([
+      { def: { id: "job_a", initiator: "alice" }, state: "DONE", startTime: Date.UTC(2026, 0, 1) },
+      { def: { id: "job_b", initiator: "bob" }, state: "RUNNING", startTime: Date.UTC(2026, 0, 2) },
+    ]);
+
+    const result = await callTool(registerJobs, "job", {
+      action: "list",
+      projectKey: "PROJ",
+      limit: 2,
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(clientMocks.get).toHaveBeenCalledWith("/public/api/projects/PROJ/jobs/?limit=2");
+    expect(result.structured?.serverLimitApplied).toBe(true);
+    expect(result.structured?.offset).toBe(0);
+    expect(result.structured?.limit).toBe(2);
+    expect(result.structured?.query).toBeNull();
   });
 
   it("job buildAndWait waits for terminal state", async () => {

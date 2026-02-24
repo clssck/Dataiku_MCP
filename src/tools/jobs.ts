@@ -1,8 +1,14 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { get, getProjectKey, getText, post } from "../client.js";
+import {
+  emptyListText,
+  filterByQuery,
+  formatBulletText,
+  normalizeQuery,
+  paginateItems,
+} from "./list-format.js";
 import { registerTool } from "./register-tool.js";
-import { emptyListText, filterByQuery, formatBulletText, paginateItems } from "./list-format.js";
 
 const optionalProjectKey = z.string().optional();
 
@@ -70,8 +76,31 @@ const jobInputSchema = z.discriminatedUnion("action", [
   }),
 ]);
 
+const DEFAULT_WAIT_POLL_INTERVAL_MS = 2_000;
+const MAX_WAIT_POLL_INTERVAL_MS = 10_000;
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+interface ComputeNextPollDelayMsOptions {
+  pollCount: number;
+  baseIntervalMs: number;
+  adaptiveEnabled: boolean;
+}
+
+export function computeNextPollDelayMs({
+  pollCount,
+  baseIntervalMs,
+  adaptiveEnabled,
+}: ComputeNextPollDelayMsOptions): number {
+  if (!adaptiveEnabled) {
+    return baseIntervalMs;
+  }
+
+  const step = Math.max(0, Math.floor((pollCount - 1) / 3));
+  const interval = baseIntervalMs * 2 ** step;
+  return Math.min(interval, Math.max(baseIntervalMs, MAX_WAIT_POLL_INTERVAL_MS));
 }
 
 function isTerminalState(state: string | undefined): boolean {
@@ -119,8 +148,9 @@ async function waitForJob({
   structuredContent: Record<string, unknown>;
   isError?: boolean;
 }> {
-  const intervalMs = Math.max(1, pollIntervalMs ?? 2000);
-  const timeout = Math.max(intervalMs, timeoutMs ?? 120_000);
+  const baseIntervalMs = Math.max(1, pollIntervalMs ?? DEFAULT_WAIT_POLL_INTERVAL_MS);
+  const adaptivePolling = pollIntervalMs === undefined;
+  const timeout = Math.max(baseIntervalMs, timeoutMs ?? 120_000);
   const startedAt = Date.now();
   let pollCount = 0;
   const jobEnc = encodeURIComponent(jobId);
@@ -195,6 +225,8 @@ async function waitForJob({
           type: def.type ?? "unknown",
           elapsedMs,
           pollCount,
+          pollIntervalMs: baseIntervalMs,
+          adaptivePolling,
           progress: gs,
           terminalSuccess,
         },
@@ -218,13 +250,20 @@ async function waitForJob({
           normalizedState: normalizeJobWaitState(state, true),
           elapsedMs,
           pollCount,
+          pollIntervalMs: baseIntervalMs,
+          adaptivePolling,
           timeoutMs: timeout,
         },
         isError: true,
       };
     }
 
-    await sleep(Math.min(intervalMs, timeout - elapsedMs));
+    const nextDelayMs = computeNextPollDelayMs({
+      pollCount,
+      baseIntervalMs,
+      adaptiveEnabled: adaptivePolling,
+    });
+    await sleep(Math.min(nextDelayMs, timeout - elapsedMs));
   }
 }
 
@@ -258,14 +297,45 @@ export function register(server: McpServer) {
       const enc = encodeURIComponent(pk);
 
       if (action === "list") {
-        const jobs = await get<
-          Array<{
-            def: { id: string; name?: string; initiator?: string };
-            state?: string;
-            startTime?: number;
-          }>
-        >(`/public/api/projects/${enc}/jobs/`);
-        const filtered = filterByQuery(jobs, query, (job) => [
+        const normalizedQuery = normalizeQuery(query);
+        const useServerLimit = limit !== undefined && (offset ?? 0) === 0 && !normalizedQuery;
+        const listPath = useServerLimit
+          ? `/public/api/projects/${enc}/jobs/?limit=${encodeURIComponent(String(limit))}`
+          : `/public/api/projects/${enc}/jobs/`;
+        const jobs =
+          await get<
+            Array<{
+              def: { id: string; name?: string; initiator?: string };
+              state?: string;
+              startTime?: number;
+            }>
+          >(listPath);
+
+        if (useServerLimit) {
+          const text = formatBulletText(
+            jobs.map((job) => {
+              const started = job.startTime ? new Date(job.startTime).toISOString() : "unknown";
+              return `${job.def.id} [${job.state ?? "unknown"}] started ${started}${job.def.initiator ? ` by ${job.def.initiator}` : ""}`;
+            }),
+            emptyListText("jobs"),
+          );
+          return {
+            content: [{ type: "text", text }],
+            structuredContent: {
+              ok: true,
+              total: jobs.length,
+              filtered: jobs.length,
+              offset: 0,
+              limit,
+              query: null,
+              items: jobs,
+              hasMore: jobs.length === limit,
+              serverLimitApplied: true,
+            },
+          };
+        }
+
+        const filtered = filterByQuery(jobs, normalizedQuery, (job) => [
           job.def.id,
           job.def.name,
           job.def.initiator,
@@ -292,7 +362,7 @@ export function register(server: McpServer) {
             filtered: filtered.length,
             offset: pageOffset,
             limit: pageLimit,
-            query: query ?? null,
+            query: normalizedQuery ?? null,
             items: page,
             hasMore,
           },

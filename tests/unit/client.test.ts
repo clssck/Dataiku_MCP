@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { DataikuError, get, getProjectKey, post, upload } from "../../src/client.js";
+import {
+  DataikuError,
+  get,
+  getProjectKey,
+  getText,
+  post,
+  stream,
+  upload,
+} from "../../src/client.js";
 
 async function expectDataikuError(promise: Promise<unknown>): Promise<DataikuError> {
   try {
@@ -193,6 +201,168 @@ describe("request JSON handling", () => {
       } else {
         delete process.env.DATAIKU_API_KEY;
       }
+    }
+  });
+});
+
+describe("GET cache", () => {
+  it("caches GET JSON responses when enabled and expires entries after TTL", async () => {
+    const originalUrl = process.env.DATAIKU_URL;
+    const originalKey = process.env.DATAIKU_API_KEY;
+    const originalCacheEnabled = process.env.DATAIKU_ENABLE_GET_CACHE;
+    const originalCacheTtl = process.env.DATAIKU_GET_CACHE_TTL_MS;
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ value: 1 }), {
+          status: 200,
+          statusText: "OK",
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ value: 2 }), {
+          status: 200,
+          statusText: "OK",
+        }),
+      );
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    process.env.DATAIKU_URL = "https://example.dataiku.io";
+    process.env.DATAIKU_API_KEY = "test-token";
+    process.env.DATAIKU_ENABLE_GET_CACHE = "1";
+    process.env.DATAIKU_GET_CACHE_TTL_MS = "1000";
+
+    try {
+      const first = await get<{ value: number }>("/public/api/cache/json");
+      const second = await get<{ value: number }>("/public/api/cache/json");
+
+      expect(first).toEqual({ value: 1 });
+      expect(second).toEqual({ value: 1 });
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+      vi.setSystemTime(new Date("2026-01-01T00:00:01.100Z"));
+
+      const third = await get<{ value: number }>("/public/api/cache/json");
+      expect(third).toEqual({ value: 2 });
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      fetchSpy.mockRestore();
+      vi.useRealTimers();
+      if (originalUrl) process.env.DATAIKU_URL = originalUrl;
+      else delete process.env.DATAIKU_URL;
+      if (originalKey) process.env.DATAIKU_API_KEY = originalKey;
+      else delete process.env.DATAIKU_API_KEY;
+      if (originalCacheEnabled) process.env.DATAIKU_ENABLE_GET_CACHE = originalCacheEnabled;
+      else delete process.env.DATAIKU_ENABLE_GET_CACHE;
+      if (originalCacheTtl) process.env.DATAIKU_GET_CACHE_TTL_MS = originalCacheTtl;
+      else delete process.env.DATAIKU_GET_CACHE_TTL_MS;
+    }
+  });
+
+  it("invalidates GET cache after successful POST", async () => {
+    const originalUrl = process.env.DATAIKU_URL;
+    const originalKey = process.env.DATAIKU_API_KEY;
+    const originalCacheEnabled = process.env.DATAIKU_ENABLE_GET_CACHE;
+    const originalCacheTtl = process.env.DATAIKU_GET_CACHE_TTL_MS;
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ value: 1 }), {
+          status: 200,
+          statusText: "OK",
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          statusText: "OK",
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ value: 2 }), {
+          status: 200,
+          statusText: "OK",
+        }),
+      );
+
+    process.env.DATAIKU_URL = "https://example.dataiku.io";
+    process.env.DATAIKU_API_KEY = "test-token";
+    process.env.DATAIKU_ENABLE_GET_CACHE = "1";
+    process.env.DATAIKU_GET_CACHE_TTL_MS = "1000";
+
+    try {
+      const first = await get<{ value: number }>("/public/api/cache/invalidate");
+      await post<{ ok: boolean }>("/public/api/cache/invalidate", { mutate: true });
+      const second = await get<{ value: number }>("/public/api/cache/invalidate");
+
+      expect(first).toEqual({ value: 1 });
+      expect(second).toEqual({ value: 2 });
+      expect(fetchSpy).toHaveBeenCalledTimes(3);
+    } finally {
+      fetchSpy.mockRestore();
+      if (originalUrl) process.env.DATAIKU_URL = originalUrl;
+      else delete process.env.DATAIKU_URL;
+      if (originalKey) process.env.DATAIKU_API_KEY = originalKey;
+      else delete process.env.DATAIKU_API_KEY;
+      if (originalCacheEnabled) process.env.DATAIKU_ENABLE_GET_CACHE = originalCacheEnabled;
+      else delete process.env.DATAIKU_ENABLE_GET_CACHE;
+      if (originalCacheTtl) process.env.DATAIKU_GET_CACHE_TTL_MS = originalCacheTtl;
+      else delete process.env.DATAIKU_GET_CACHE_TTL_MS;
+    }
+  });
+
+  it("caches getText and stream GET responses when enabled", async () => {
+    const originalUrl = process.env.DATAIKU_URL;
+    const originalKey = process.env.DATAIKU_API_KEY;
+    const originalCacheEnabled = process.env.DATAIKU_ENABLE_GET_CACHE;
+    const originalCacheTtl = process.env.DATAIKU_GET_CACHE_TTL_MS;
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response("log-line", {
+          status: 200,
+          statusText: "OK",
+          headers: { "content-type": "text/plain" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response("stream-body", {
+          status: 200,
+          statusText: "OK",
+          headers: { "content-type": "text/plain" },
+        }),
+      );
+
+    process.env.DATAIKU_URL = "https://example.dataiku.io";
+    process.env.DATAIKU_API_KEY = "test-token";
+    process.env.DATAIKU_ENABLE_GET_CACHE = "1";
+    process.env.DATAIKU_GET_CACHE_TTL_MS = "1000";
+
+    try {
+      const firstText = await getText("/public/api/cache/text");
+      const secondText = await getText("/public/api/cache/text");
+      expect(firstText).toBe("log-line");
+      expect(secondText).toBe("log-line");
+
+      const firstStream = await stream("/public/api/cache/stream");
+      const secondStream = await stream("/public/api/cache/stream");
+      const firstStreamText = await new Response(firstStream.body).text();
+      const secondStreamText = await new Response(secondStream.body).text();
+      expect(firstStreamText).toBe("stream-body");
+      expect(secondStreamText).toBe("stream-body");
+
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      fetchSpy.mockRestore();
+      if (originalUrl) process.env.DATAIKU_URL = originalUrl;
+      else delete process.env.DATAIKU_URL;
+      if (originalKey) process.env.DATAIKU_API_KEY = originalKey;
+      else delete process.env.DATAIKU_API_KEY;
+      if (originalCacheEnabled) process.env.DATAIKU_ENABLE_GET_CACHE = originalCacheEnabled;
+      else delete process.env.DATAIKU_ENABLE_GET_CACHE;
+      if (originalCacheTtl) process.env.DATAIKU_GET_CACHE_TTL_MS = originalCacheTtl;
+      else delete process.env.DATAIKU_GET_CACHE_TTL_MS;
     }
   });
 });

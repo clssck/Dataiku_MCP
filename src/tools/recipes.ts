@@ -2,9 +2,9 @@ import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { del, get, getProjectKey, post, put } from "../client.js";
-import { registerTool } from "./register-tool.js";
+import { DataikuError, del, get, getProjectKey, post, put } from "../client.js";
 import { emptyListText, filterByQuery, formatBulletText, paginateItems } from "./list-format.js";
+import { registerTool } from "./register-tool.js";
 
 const optionalProjectKey = z.string().optional();
 
@@ -48,6 +48,24 @@ function missingRecipeDefinitionError(recipeName: string) {
     structuredContent: { ok: false, recipeName, reason: "missing_recipe_definition" },
     isError: true as const,
   };
+}
+
+function shouldRetryRecipeCreateWithOutputProvisioning(error: unknown): error is DataikuError {
+  if (!(error instanceof DataikuError)) return false;
+  if (
+    error.category !== "validation" &&
+    error.category !== "not_found" &&
+    error.category !== "unknown"
+  ) {
+    return false;
+  }
+  const detail = `${error.statusText}\n${error.body}`.toLowerCase();
+  const mentionsMissingDataset =
+    detail.includes("dataset") &&
+    (detail.includes("not found") ||
+      detail.includes("does not exist") ||
+      detail.includes("unknown"));
+  return mentionsMissingDataset;
 }
 
 const patchSchema = z.record(z.string(), z.unknown());
@@ -232,91 +250,6 @@ export function register(server: McpServer) {
           };
         }
 
-        // Resolve output connection — explicit, or auto-detect from existing datasets
-        const existingDs = await get<
-          Array<{
-            name: string;
-            type?: string;
-            params?: {
-              connection?: string;
-              schema?: string;
-              catalog?: string;
-            };
-            managed?: boolean;
-          }>
-        >(`/public/api/projects/${enc}/datasets/`);
-
-        let outputConnection = asString(raw.outputConnection);
-        if (!outputConnection) {
-          const managedDs = existingDs.find((d) => d.managed && d.params?.connection);
-          if (managedDs?.params?.connection) {
-            outputConnection = managedDs.params.connection;
-          }
-        }
-
-        // Auto-create missing output datasets
-        const createdDatasets: string[] = [];
-        if (outputConnection) {
-          const existingNames = new Set(existingDs.map((d) => d.name));
-          const connectionSample = existingDs.find(
-            (d) => d.params?.connection === outputConnection && d.type,
-          );
-          const inferredOutputType = connectionSample?.type ?? "Filesystem";
-
-          const outputRoles = outputs as Record<string, { items?: Array<{ ref?: string }> }>;
-          for (const role of Object.values(outputRoles)) {
-            for (const item of role.items ?? []) {
-              if (item.ref && !existingNames.has(item.ref)) {
-                const datasetBody: Record<string, unknown> =
-                  inferredOutputType === "Filesystem"
-                    ? {
-                        projectKey: pk,
-                        name: item.ref,
-                        type: inferredOutputType,
-                        params: {
-                          connection: outputConnection,
-                          path: `\${projectKey}/${item.ref}`,
-                        },
-                        formatType: "csv",
-                        formatParams: {
-                          style: "excel",
-                          charset: "utf8",
-                          separator: "\t",
-                          quoteChar: '"',
-                          escapeChar: "\\",
-                          dateSerializationFormat: "ISO",
-                          arrayMapFormat: "json",
-                          parseHeaderRow: true,
-                          compress: "gz",
-                        },
-                        managed: true,
-                      }
-                    : {
-                        projectKey: pk,
-                        name: item.ref,
-                        type: inferredOutputType,
-                        params: {
-                          connection: outputConnection,
-                          mode: "table",
-                          table: item.ref,
-                          ...(connectionSample?.params?.schema
-                            ? { schema: connectionSample.params.schema }
-                            : {}),
-                          ...(connectionSample?.params?.catalog
-                            ? { catalog: connectionSample.params.catalog }
-                            : {}),
-                        },
-                        managed: connectionSample?.managed ?? false,
-                      };
-
-                await post(`/public/api/projects/${enc}/datasets/`, datasetBody);
-                existingNames.add(item.ref);
-                createdDatasets.push(item.ref);
-              }
-            }
-          }
-        }
-
         const recipePrototype: Record<string, unknown> = {
           type,
           name,
@@ -328,10 +261,107 @@ export function register(server: McpServer) {
         if (payload !== undefined) {
           creationSettings.script = payload;
         }
-        await post<Record<string, unknown>>(`/public/api/projects/${enc}/recipes/`, {
-          recipePrototype,
-          creationSettings,
-        });
+
+        const createRecipe = async () =>
+          await post<Record<string, unknown>>(`/public/api/projects/${enc}/recipes/`, {
+            recipePrototype,
+            creationSettings,
+          });
+
+        const createdDatasets: string[] = [];
+        let usedOutputProvisioningFallback = false;
+        try {
+          await createRecipe();
+        } catch (error) {
+          if (!shouldRetryRecipeCreateWithOutputProvisioning(error)) {
+            throw error;
+          }
+          usedOutputProvisioningFallback = true;
+
+          const existingDs = await get<
+            Array<{
+              name: string;
+              type?: string;
+              params?: {
+                connection?: string;
+                schema?: string;
+                catalog?: string;
+              };
+              managed?: boolean;
+            }>
+          >(`/public/api/projects/${enc}/datasets/`);
+
+          let outputConnection = asString(raw.outputConnection);
+          if (!outputConnection) {
+            const managedDs = existingDs.find((d) => d.managed && d.params?.connection);
+            if (managedDs?.params?.connection) {
+              outputConnection = managedDs.params.connection;
+            }
+          }
+
+          if (outputConnection) {
+            const existingNames = new Set(existingDs.map((d) => d.name));
+            const connectionSample = existingDs.find(
+              (d) => d.params?.connection === outputConnection && d.type,
+            );
+            const inferredOutputType = connectionSample?.type ?? "Filesystem";
+
+            const outputRoles = outputs as Record<string, { items?: Array<{ ref?: string }> }>;
+            for (const role of Object.values(outputRoles)) {
+              for (const item of role.items ?? []) {
+                if (item.ref && !existingNames.has(item.ref)) {
+                  const datasetBody: Record<string, unknown> =
+                    inferredOutputType === "Filesystem"
+                      ? {
+                          projectKey: pk,
+                          name: item.ref,
+                          type: inferredOutputType,
+                          params: {
+                            connection: outputConnection,
+                            path: `\${projectKey}/${item.ref}`,
+                          },
+                          formatType: "csv",
+                          formatParams: {
+                            style: "excel",
+                            charset: "utf8",
+                            separator: "\t",
+                            quoteChar: '"',
+                            escapeChar: "\\",
+                            dateSerializationFormat: "ISO",
+                            arrayMapFormat: "json",
+                            parseHeaderRow: true,
+                            compress: "gz",
+                          },
+                          managed: true,
+                        }
+                      : {
+                          projectKey: pk,
+                          name: item.ref,
+                          type: inferredOutputType,
+                          params: {
+                            connection: outputConnection,
+                            mode: "table",
+                            table: item.ref,
+                            ...(connectionSample?.params?.schema
+                              ? { schema: connectionSample.params.schema }
+                              : {}),
+                            ...(connectionSample?.params?.catalog
+                              ? { catalog: connectionSample.params.catalog }
+                              : {}),
+                          },
+                          managed: connectionSample?.managed ?? false,
+                        };
+
+                  await post(`/public/api/projects/${enc}/datasets/`, datasetBody);
+                  existingNames.add(item.ref);
+                  createdDatasets.push(item.ref);
+                }
+              }
+            }
+          }
+
+          await createRecipe();
+        }
 
         // For join recipes: configure join conditions after creation
         let joinConfigured = false;
@@ -404,6 +434,7 @@ export function register(server: McpServer) {
             type,
             createdDatasets,
             joinConfigured,
+            outputProvisioningFallbackUsed: usedOutputProvisioningFallback,
           },
         };
       }

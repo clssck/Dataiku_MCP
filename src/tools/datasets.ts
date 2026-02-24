@@ -5,10 +5,10 @@ import { pipeline } from "node:stream/promises";
 import { createGzip } from "node:zlib";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { del, get, getProjectKey, post, put, stream } from "../client.js";
+import { DataikuError, del, get, getProjectKey, post, put, stream } from "../client.js";
 import { deepMerge } from "./deep-merge.js";
-import { registerTool } from "./register-tool.js";
 import { emptyListText, filterByQuery, formatBulletText, paginateItems } from "./list-format.js";
+import { registerTool } from "./register-tool.js";
 
 const optionalProjectKey = z.string().optional();
 
@@ -33,6 +33,86 @@ function asString(value: unknown): string | undefined {
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   return value as Record<string, unknown>;
+}
+
+const DEFAULT_DATABASE_DATASET_TYPE = "Snowflake";
+const DEFAULT_FILESYSTEM_DATASET_TYPE = "Filesystem";
+
+function shouldRetryWithConnectionInferredType(error: unknown): error is DataikuError {
+  if (!(error instanceof DataikuError)) return false;
+  if (error.category !== "validation" && error.category !== "unknown") return false;
+  const detail = `${error.statusText}\n${error.body}`.toLowerCase();
+  return (
+    detail.includes("connection") ||
+    detail.includes("dataset type") ||
+    detail.includes("invalid type") ||
+    detail.includes("illegal argument")
+  );
+}
+
+function buildDatasetCreateBody({
+  projectKey,
+  datasetName,
+  connection,
+  dsType,
+  table,
+  dbSchema,
+  catalog,
+  formatType,
+  formatParams,
+  managed,
+}: {
+  projectKey: string;
+  datasetName: string;
+  connection: string;
+  dsType: string;
+  table?: string;
+  dbSchema?: string;
+  catalog?: string;
+  formatType?: string;
+  formatParams?: Record<string, unknown>;
+  managed?: boolean;
+}): Record<string, unknown> {
+  if (table) {
+    const params: Record<string, unknown> = {
+      connection,
+      mode: "table",
+      table,
+    };
+    if (dbSchema) params.schema = dbSchema;
+    if (catalog) params.catalog = catalog;
+
+    return {
+      projectKey,
+      name: datasetName,
+      type: dsType,
+      params,
+      managed: managed ?? false,
+    };
+  }
+
+  return {
+    projectKey,
+    name: datasetName,
+    type: dsType,
+    params: {
+      connection,
+      path: `\${projectKey}/${datasetName}`,
+    },
+    formatType: formatType ?? "csv",
+    formatParams: formatParams ?? {
+      style: "excel",
+      charset: "utf8",
+      separator: "\t",
+      quoteChar: '"',
+      escapeChar: "\\",
+      dateSerializationFormat: "ISO",
+      arrayMapFormat: "json",
+      parseHeaderRow: true,
+      compress: "gz",
+    },
+    managed: managed ?? true,
+  };
 }
 
 function csvEscape(field: string): string {
@@ -450,68 +530,63 @@ export function register(server: McpServer) {
           };
         }
 
-        // Auto-detect dataset type from existing datasets using the same connection
         const table = asString(raw.table);
         const dbSchema = asString(raw.dbSchema);
         const catalog = asString(raw.catalog);
         const formatType = asString(raw.formatType);
         const formatParams = asRecord(raw.formatParams);
         const managed = typeof raw.managed === "boolean" ? raw.managed : undefined;
-        let dsType = asString(raw.type);
-        if (!dsType) {
+        const explicitType = asString(raw.type);
+        let dsType =
+          explicitType ?? (table ? DEFAULT_DATABASE_DATASET_TYPE : DEFAULT_FILESYSTEM_DATASET_TYPE);
+        let usedInferredTypeFallback = false;
+
+        let body = buildDatasetCreateBody({
+          projectKey: pk,
+          datasetName,
+          connection,
+          dsType,
+          table,
+          dbSchema,
+          catalog,
+          formatType,
+          formatParams,
+          managed,
+        });
+
+        try {
+          await post<Record<string, unknown>>(`/public/api/projects/${enc}/datasets/`, body);
+        } catch (error) {
+          if (explicitType || !shouldRetryWithConnectionInferredType(error)) {
+            throw error;
+          }
+
           const existing = await get<Array<{ type?: string; params?: { connection?: string } }>>(
             `/public/api/projects/${enc}/datasets/`,
           );
-          const match = existing.find((d) => d.params?.connection === connection && d.type);
-          dsType = match?.type ?? (table ? "Snowflake" : "Filesystem");
-        }
+          const inferredType = existing.find(
+            (d) => d.params?.connection === connection && d.type,
+          )?.type;
+          if (!inferredType || inferredType === dsType) {
+            throw error;
+          }
 
-        let body: Record<string, unknown>;
-
-        if (table) {
-          // Database dataset (Snowflake, PostgreSQL, etc.)
-          const params: Record<string, unknown> = {
+          dsType = inferredType;
+          usedInferredTypeFallback = true;
+          body = buildDatasetCreateBody({
+            projectKey: pk,
+            datasetName,
             connection,
-            mode: "table",
+            dsType,
             table,
-          };
-          if (dbSchema) params.schema = dbSchema;
-          if (catalog) params.catalog = catalog;
-
-          body = {
-            projectKey: pk,
-            name: datasetName,
-            type: dsType,
-            params,
-            managed: managed ?? false,
-          };
-        } else {
-          // Filesystem dataset
-          body = {
-            projectKey: pk,
-            name: datasetName,
-            type: dsType,
-            params: {
-              connection,
-              path: `\${projectKey}/${datasetName}`,
-            },
-            formatType: formatType ?? "csv",
-            formatParams: formatParams ?? {
-              style: "excel",
-              charset: "utf8",
-              separator: "\t",
-              quoteChar: '"',
-              escapeChar: "\\",
-              dateSerializationFormat: "ISO",
-              arrayMapFormat: "json",
-              parseHeaderRow: true,
-              compress: "gz",
-            },
-            managed: managed ?? true,
-          };
+            dbSchema,
+            catalog,
+            formatType,
+            formatParams,
+            managed,
+          });
+          await post<Record<string, unknown>>(`/public/api/projects/${enc}/datasets/`, body);
         }
-
-        await post<Record<string, unknown>>(`/public/api/projects/${enc}/datasets/`, body);
         const confirmParts = [`Dataset "${datasetName}" created on connection "${connection}".`];
         if (table) confirmParts.push(`Table: ${table}`);
         return {
@@ -522,6 +597,8 @@ export function register(server: McpServer) {
             connection,
             created: true,
             table: table ?? null,
+            type: dsType,
+            inferredTypeFallbackUsed: usedInferredTypeFallback,
           },
         };
       }

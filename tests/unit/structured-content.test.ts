@@ -4,6 +4,25 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const clientMocks = vi.hoisted(() => ({
+  DataikuError: class DataikuError extends Error {
+    category: "validation" | "not_found" | "unknown" = "validation";
+    retryable = false;
+    retryHint = "";
+    retry?: unknown;
+
+    constructor(
+      public status: number,
+      public statusText: string,
+      public body: string,
+      retry?: unknown,
+    ) {
+      super(body);
+      this.name = "DataikuError";
+      this.retry = retry;
+      if (status === 404) this.category = "not_found";
+      else if (status >= 500) this.category = "unknown";
+    }
+  },
   get: vi.fn(),
   getProjectKey: vi.fn((projectKey?: string) => projectKey ?? "TEST_PROJECT"),
   putVoid: vi.fn(),

@@ -1,12 +1,31 @@
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { access, mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 const clientMocks = vi.hoisted(() => ({
+  DataikuError: class DataikuError extends Error {
+    category: "validation" | "not_found" | "unknown" = "validation";
+    retryable = false;
+    retryHint = "";
+    retry?: unknown;
+
+    constructor(
+      public status: number,
+      public statusText: string,
+      public body: string,
+      retry?: unknown,
+    ) {
+      super(body);
+      this.name = "DataikuError";
+      this.retry = retry;
+      if (status === 404) this.category = "not_found";
+      else if (status >= 500) this.category = "unknown";
+    }
+  },
   del: vi.fn(),
   get: vi.fn(),
   getProjectKey: vi.fn((projectKey?: string) => projectKey ?? "TEST_PROJECT"),
@@ -20,9 +39,9 @@ const clientMocks = vi.hoisted(() => ({
 
 vi.mock("../../src/client.js", () => clientMocks);
 
-import { register as registerDatasets } from "../../src/tools/datasets.js";
 import { register as registerCodeEnvs } from "../../src/tools/code-envs.js";
 import { register as registerConnections } from "../../src/tools/connections.js";
+import { register as registerDatasets } from "../../src/tools/datasets.js";
 import { register as registerFolders } from "../../src/tools/folders.js";
 import { register as registerJobs } from "../../src/tools/jobs.js";
 import { register as registerProjects } from "../../src/tools/projects.js";
@@ -71,13 +90,10 @@ describe("Tool Behavior Coverage", () => {
     );
   });
 
-  it("dataset create infers type from existing datasets on same connection", async () => {
-    clientMocks.get.mockResolvedValue([
-      { type: "Filesystem", params: { connection: "managed_conn" } },
-    ]);
+  it("dataset create skips connection type discovery when optimistic create succeeds", async () => {
     clientMocks.post.mockResolvedValue({});
 
-    const { text, isError } = await callTool(registerDatasets, "dataset", {
+    const { text, isError, structured } = await callTool(registerDatasets, "dataset", {
       action: "create",
       projectKey: "PROJ",
       datasetName: "new_ds",
@@ -86,6 +102,8 @@ describe("Tool Behavior Coverage", () => {
 
     expect(isError).toBeFalsy();
     expect(text).toContain('Dataset "new_ds" created');
+    expect(clientMocks.get).not.toHaveBeenCalled();
+    expect(clientMocks.post).toHaveBeenCalledTimes(1);
     expect(clientMocks.post).toHaveBeenCalledWith(
       "/public/api/projects/PROJ/datasets/",
       expect.objectContaining({
@@ -94,6 +112,38 @@ describe("Tool Behavior Coverage", () => {
         params: expect.objectContaining({ connection: "managed_conn" }),
       }),
     );
+    expect(structured?.inferredTypeFallbackUsed).toBe(false);
+  });
+
+  it("dataset create retries with inferred connection type after optimistic validation failure", async () => {
+    clientMocks.post
+      .mockRejectedValueOnce(
+        new clientMocks.DataikuError(400, "Bad Request", "Invalid type for this connection"),
+      )
+      .mockResolvedValueOnce({});
+    clientMocks.get.mockResolvedValue([
+      { type: "Snowflake", params: { connection: "managed_conn" } },
+    ]);
+
+    const { text, isError, structured } = await callTool(registerDatasets, "dataset", {
+      action: "create",
+      projectKey: "PROJ",
+      datasetName: "new_ds",
+      connection: "managed_conn",
+    });
+
+    expect(isError).toBeFalsy();
+    expect(text).toContain('Dataset "new_ds" created');
+    expect(clientMocks.get).toHaveBeenCalledWith("/public/api/projects/PROJ/datasets/");
+    expect(clientMocks.post).toHaveBeenCalledTimes(2);
+    expect(clientMocks.post).toHaveBeenLastCalledWith(
+      "/public/api/projects/PROJ/datasets/",
+      expect.objectContaining({
+        name: "new_ds",
+        type: "Snowflake",
+      }),
+    );
+    expect(structured?.inferredTypeFallbackUsed).toBe(true);
   });
 
   it("dataset preview converts TSV stream to CSV and respects row limit", async () => {
@@ -328,7 +378,8 @@ describe("Tool Behavior Coverage", () => {
     );
   });
 
-  it("recipe create auto-creates outputs using inferred connection dataset type", async () => {
+  it("recipe create provisions missing outputs and retries when initial create fails for missing dataset", async () => {
+    const recipePath = "/public/api/projects/PROJ/recipes/";
     clientMocks.get.mockResolvedValue([
       {
         name: "orders_input",
@@ -337,9 +388,13 @@ describe("Tool Behavior Coverage", () => {
         params: { connection: "snowflake_main", schema: "PUBLIC" },
       },
     ]);
-    clientMocks.post.mockResolvedValue({});
+    clientMocks.post
+      .mockRejectedValueOnce(
+        new clientMocks.DataikuError(404, "Not Found", "Dataset orders_enriched not found"),
+      )
+      .mockResolvedValue({});
 
-    const { text, isError } = await callTool(registerRecipes, "recipe", {
+    const { text, isError, structured } = await callTool(registerRecipes, "recipe", {
       action: "create",
       projectKey: "PROJ",
       type: "sql_query",
@@ -350,6 +405,9 @@ describe("Tool Behavior Coverage", () => {
 
     expect(isError).toBeFalsy();
     expect(text).toContain('Recipe "sql_query_orders_enriched" created.');
+    expect(
+      clientMocks.post.mock.calls.filter(([path]: [unknown]) => path === recipePath),
+    ).toHaveLength(2);
     expect(clientMocks.post).toHaveBeenCalledWith(
       "/public/api/projects/PROJ/datasets/",
       expect.objectContaining({
@@ -363,6 +421,27 @@ describe("Tool Behavior Coverage", () => {
         }),
       }),
     );
+    expect(structured?.outputProvisioningFallbackUsed).toBe(true);
+  });
+
+  it("recipe create skips output provisioning when optimistic create succeeds", async () => {
+    clientMocks.post.mockResolvedValue({});
+
+    const { isError, structured } = await callTool(registerRecipes, "recipe", {
+      action: "create",
+      projectKey: "PROJ",
+      type: "python",
+      inputDatasets: ["orders_input"],
+      outputDataset: "orders_enriched",
+    });
+
+    expect(isError).toBeFalsy();
+    expect(clientMocks.get).not.toHaveBeenCalled();
+    const datasetCreateCalls = clientMocks.post.mock.calls.filter(
+      ([path]: [unknown]) => path === "/public/api/projects/PROJ/datasets/",
+    );
+    expect(datasetCreateCalls).toHaveLength(0);
+    expect(structured?.outputProvisioningFallbackUsed).toBe(false);
   });
 
   it("project map returns raw graph when includeRaw is true", async () => {
@@ -452,6 +531,44 @@ describe("Tool Behavior Coverage", () => {
       maxEdges: 600,
       truncated: false,
     });
+  });
+
+  it("project map tolerates slow metadata endpoints and reports timeout warnings", async () => {
+    const originalTimeout = process.env.DATAIKU_PROJECT_MAP_METADATA_TIMEOUT_MS;
+    process.env.DATAIKU_PROJECT_MAP_METADATA_TIMEOUT_MS = "1";
+    clientMocks.get.mockImplementation(async (path: string) => {
+      if (path.endsWith("/flow/graph/")) {
+        return {
+          nodes: {},
+          datasets: [],
+          recipes: [],
+          folders: [],
+        };
+      }
+      if (path.endsWith("/managedfolders/")) {
+        return await new Promise<never>(() => {});
+      }
+      if (path.endsWith("/datasets/")) return [];
+      if (path.endsWith("/recipes/")) return [];
+      throw new Error(`Unexpected get path: ${path}`);
+    });
+
+    try {
+      const { text, isError, structured } = await callTool(registerProjects, "project", {
+        action: "map",
+        projectKey: "PROJ",
+      });
+
+      expect(isError).toBeFalsy();
+      expect(text).toContain("Flow map for PROJ");
+      const warnings = (structured?.map as { warnings?: string[] } | undefined)?.warnings ?? [];
+      expect(
+        warnings.some((warning) => warning.includes("Managed folders metadata timed out after")),
+      ).toBe(true);
+    } finally {
+      if (originalTimeout) process.env.DATAIKU_PROJECT_MAP_METADATA_TIMEOUT_MS = originalTimeout;
+      else delete process.env.DATAIKU_PROJECT_MAP_METADATA_TIMEOUT_MS;
+    }
   });
 
   it("project map applies maxNodes/maxEdges truncation with metadata", async () => {
@@ -546,6 +663,53 @@ describe("Tool Behavior Coverage", () => {
     ).toBe(true);
   });
 
+  it("connection infer fast mode uses DSS connection names endpoint", async () => {
+    clientMocks.get.mockImplementation(async (path: string) => {
+      if (path === "/public/api/connections/get-names/") {
+        return ["z_conn", "a_conn"];
+      }
+      throw new Error(`Unexpected get path: ${path}`);
+    });
+
+    const { text, isError, structured } = await callTool(registerConnections, "connection", {
+      action: "infer",
+      projectKey: "PROJ",
+    });
+
+    expect(isError).toBeFalsy();
+    expect(text).toContain("Connections available on DSS");
+    expect(text).toContain("• a_conn");
+    expect(text).toContain("• z_conn");
+    expect(clientMocks.get).toHaveBeenCalledTimes(1);
+    expect(clientMocks.get).toHaveBeenCalledWith("/public/api/connections/get-names/");
+    expect(structured?.mode).toBe("fast");
+  });
+
+  it("connection infer fast mode falls back to dataset scan when names lookup fails", async () => {
+    clientMocks.get.mockImplementation(async (path: string) => {
+      if (path === "/public/api/connections/get-names/") {
+        throw new Error("names endpoint unavailable");
+      }
+      if (path === "/public/api/projects/PROJ/datasets/") {
+        return [
+          { name: "orders", type: "Snowflake", managed: true, params: { connection: "warehouse" } },
+        ];
+      }
+      throw new Error(`Unexpected get path: ${path}`);
+    });
+
+    const { text, isError, structured } = await callTool(registerConnections, "connection", {
+      action: "infer",
+      projectKey: "PROJ",
+    });
+
+    expect(isError).toBeFalsy();
+    expect(text).toContain("fell back to dataset scan");
+    expect(structured?.mode).toBe("fast");
+    expect(structured?.fallback).toBe("datasetScan");
+    expect(structured?.connectionCount).toBe(1);
+  });
+
   it("connection infer marks connection as managed if any dataset is managed", async () => {
     clientMocks.get.mockResolvedValue([
       {
@@ -565,6 +729,7 @@ describe("Tool Behavior Coverage", () => {
     const { text, isError } = await callTool(registerConnections, "connection", {
       action: "infer",
       projectKey: "PROJ",
+      mode: "rich",
     });
 
     expect(isError).toBeFalsy();

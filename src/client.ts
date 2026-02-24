@@ -249,6 +249,77 @@ function readPositiveIntEnv(name: string, fallback: number): number {
   return parsed;
 }
 
+function envEnabled(name: string): boolean {
+  const raw = process.env[name]?.trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
+
+const DEFAULT_GET_CACHE_TTL_MS = 2_000;
+const MIN_GET_CACHE_TTL_MS = 1_000;
+const MAX_GET_CACHE_TTL_MS = 3_000;
+
+interface CachedGetResponse {
+  response: Response;
+  expiresAt: number;
+}
+
+const getResponseCache = new Map<string, CachedGetResponse>();
+
+function buildGetCacheKey(path: string, acceptHeader: string): string {
+  return `${acceptHeader}::${path}`;
+}
+
+function invalidateGetCache(): void {
+  if (getResponseCache.size > 0) {
+    getResponseCache.clear();
+  }
+}
+
+function getGetCacheTtlMs(): number {
+  if (!envEnabled("DATAIKU_ENABLE_GET_CACHE")) {
+    invalidateGetCache();
+    return 0;
+  }
+  const configured = readPositiveIntEnv("DATAIKU_GET_CACHE_TTL_MS", DEFAULT_GET_CACHE_TTL_MS);
+  return Math.max(MIN_GET_CACHE_TTL_MS, Math.min(configured, MAX_GET_CACHE_TTL_MS));
+}
+
+function getCachedGetResponse(
+  path: string,
+  acceptHeader: string,
+  ttlMs: number,
+): Response | undefined {
+  if (ttlMs <= 0) return undefined;
+  const key = buildGetCacheKey(path, acceptHeader);
+  const cached = getResponseCache.get(key);
+  if (!cached) return undefined;
+  if (cached.expiresAt <= Date.now()) {
+    getResponseCache.delete(key);
+    return undefined;
+  }
+
+  try {
+    return cached.response.clone();
+  } catch {
+    getResponseCache.delete(key);
+    return undefined;
+  }
+}
+
+function cacheGetResponse(
+  path: string,
+  acceptHeader: string,
+  response: Response,
+  ttlMs: number,
+): void {
+  if (ttlMs <= 0) return;
+  const key = buildGetCacheKey(path, acceptHeader);
+  getResponseCache.set(key, {
+    response: response.clone(),
+    expiresAt: Date.now() + ttlMs,
+  });
+}
+
 function getRequestTimeoutMs(): number {
   return readPositiveIntEnv("DATAIKU_REQUEST_TIMEOUT_MS", 30_000);
 }
@@ -418,14 +489,7 @@ async function fetchWithRetry(url: string, init: RequestInit): Promise<Response>
   );
 }
 
-async function request<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
-  const url = `${getBaseUrl()}${path}`;
-  const res = await fetchWithRetry(url, {
-    method,
-    headers: getHeaders(),
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-
+async function parseJsonResponse<T>(res: Response): Promise<T> {
   const text = await res.text();
   if (!text) return undefined as T;
   try {
@@ -440,29 +504,61 @@ async function request<T = unknown>(method: string, path: string, body?: unknown
   }
 }
 
+async function fetchGetWithCache(path: string, headers: Record<string, string>): Promise<Response> {
+  const acceptHeader = headers.Accept ?? "*/*";
+  const ttlMs = getGetCacheTtlMs();
+  const cached = getCachedGetResponse(path, acceptHeader, ttlMs);
+  if (cached) {
+    return cached;
+  }
+
+  const url = `${getBaseUrl()}${path}`;
+  const response = await fetchWithRetry(url, {
+    method: "GET",
+    headers,
+  });
+  cacheGetResponse(path, acceptHeader, response, ttlMs);
+  return response;
+}
+
+async function request<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
+  const normalizedMethod = method.toUpperCase();
+  const res =
+    normalizedMethod === "GET" && body === undefined
+      ? await fetchGetWithCache(path, getHeaders())
+      : await fetchWithRetry(`${getBaseUrl()}${path}`, {
+          method: normalizedMethod,
+          headers: getHeaders(),
+          body: body !== undefined ? JSON.stringify(body) : undefined,
+        });
+
+  return parseJsonResponse<T>(res);
+}
+
 export async function get<T = unknown>(path: string): Promise<T> {
   return request<T>("GET", path);
 }
 
 export async function getText(path: string): Promise<string> {
-  const url = `${getBaseUrl()}${path}`;
-  const res = await fetchWithRetry(url, {
-    method: "GET",
-    headers: getAnyHeaders(),
-  });
+  const res = await fetchGetWithCache(path, getAnyHeaders());
   return res.text();
 }
 
 export async function post<T = unknown>(path: string, body?: unknown): Promise<T> {
-  return request<T>("POST", path, body);
+  const result = await request<T>("POST", path, body);
+  invalidateGetCache();
+  return result;
 }
 
 export async function put<T = unknown>(path: string, body: unknown): Promise<T> {
-  return request<T>("PUT", path, body);
+  const result = await request<T>("PUT", path, body);
+  invalidateGetCache();
+  return result;
 }
 
 export async function del(path: string): Promise<void> {
   await request("DELETE", path);
+  invalidateGetCache();
 }
 
 export async function putVoid(path: string, body: unknown): Promise<void> {
@@ -472,6 +568,7 @@ export async function putVoid(path: string, body: unknown): Promise<void> {
     headers: getHeaders(),
     body: JSON.stringify(body),
   });
+  invalidateGetCache();
 }
 
 export async function upload(path: string, filePath: string): Promise<void> {
@@ -490,16 +587,13 @@ export async function upload(path: string, filePath: string): Promise<void> {
     headers: { Authorization: `Bearer ${getApiKey()}` },
     body: formData,
   });
+  invalidateGetCache();
 }
 
 export async function stream(
   path: string,
 ): Promise<{ body: ReadableStream<Uint8Array>; contentType: string }> {
-  const url = `${getBaseUrl()}${path}`;
-  const res = await fetchWithRetry(url, {
-    method: "GET",
-    headers: getAnyHeaders(),
-  });
+  const res = await fetchGetWithCache(path, getAnyHeaders());
 
   if (!res.body) {
     throw new Error("No response body for stream request");

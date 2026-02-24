@@ -8,13 +8,13 @@ import {
   paginationFields,
 } from "./action-schema.js";
 import {
-  normalizeFlowGraph,
   type NormalizedFlowEdge,
   type NormalizedFlowMap,
   type NormalizedFlowNode,
+  normalizeFlowGraph,
 } from "./flow-map.js";
-import { registerTool } from "./register-tool.js";
 import { emptyListText, filterByQuery, formatBulletText, paginateItems } from "./list-format.js";
+import { registerTool } from "./register-tool.js";
 
 const projectInputSchema = actionSchema([
   actionInput("list", {
@@ -39,6 +39,56 @@ const projectInputSchema = actionSchema([
 
 const DEFAULT_MAP_MAX_NODES = 300;
 const DEFAULT_MAP_MAX_EDGES = 600;
+
+const DEFAULT_MAP_METADATA_TIMEOUT_MS = 1_500;
+const MIN_MAP_METADATA_TIMEOUT_MS = 100;
+const MAX_MAP_METADATA_TIMEOUT_MS = 15_000;
+
+interface OptionalMetadataResult<T> {
+  value?: T;
+  warning?: string;
+}
+
+function getMapMetadataTimeoutMs(): number {
+  const raw = process.env.DATAIKU_PROJECT_MAP_METADATA_TIMEOUT_MS;
+  if (!raw) return DEFAULT_MAP_METADATA_TIMEOUT_MS;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_MAP_METADATA_TIMEOUT_MS;
+  return Math.max(MIN_MAP_METADATA_TIMEOUT_MS, Math.min(parsed, MAX_MAP_METADATA_TIMEOUT_MS));
+}
+
+async function fetchOptionalMetadataWithTimeout<T>(
+  label: string,
+  timeoutMs: number,
+  fetcher: () => Promise<T>,
+): Promise<OptionalMetadataResult<T>> {
+  return await new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      resolve({
+        warning: `${label} metadata timed out after ${timeoutMs}ms; continuing without it.`,
+      });
+    }, timeoutMs);
+
+    fetcher().then(
+      (value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve({ value });
+      },
+      (error: unknown) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        const detail = error instanceof Error ? error.message : String(error);
+        resolve({ warning: `${label} metadata unavailable: ${detail}` });
+      },
+    );
+  });
+}
 
 interface FlowMapTruncationSummary {
   truncated: boolean;
@@ -249,43 +299,64 @@ export function register(server: McpServer) {
       }
 
       if (action === "map") {
-        const rawGraph = await get<unknown>(`/public/api/projects/${enc}/flow/graph/`);
-        const [foldersRes, datasetsRes, recipesRes] = await Promise.allSettled([
-          get<Array<{ id?: string; name?: string }>>(`/public/api/projects/${enc}/managedfolders/`),
-          get<Array<{ name?: string }>>(`/public/api/projects/${enc}/datasets/`),
-          get<Array<{ name?: string }>>(`/public/api/projects/${enc}/recipes/`),
+        const metadataTimeoutMs = getMapMetadataTimeoutMs();
+        const [rawGraph, foldersMeta, datasetsMeta, recipesMeta] = await Promise.all([
+          get<unknown>(`/public/api/projects/${enc}/flow/graph/`),
+          fetchOptionalMetadataWithTimeout(
+            "Managed folders",
+            metadataTimeoutMs,
+            async () =>
+              await get<Array<{ id?: string; name?: string }>>(
+                `/public/api/projects/${enc}/managedfolders/`,
+              ),
+          ),
+          fetchOptionalMetadataWithTimeout(
+            "Datasets",
+            metadataTimeoutMs,
+            async () =>
+              await get<Array<{ name?: string }>>(`/public/api/projects/${enc}/datasets/`),
+          ),
+          fetchOptionalMetadataWithTimeout(
+            "Recipes",
+            metadataTimeoutMs,
+            async () => await get<Array<{ name?: string }>>(`/public/api/projects/${enc}/recipes/`),
+          ),
         ]);
+
+        const metadataWarnings = [
+          foldersMeta.warning,
+          datasetsMeta.warning,
+          recipesMeta.warning,
+        ].filter((warning): warning is string => typeof warning === "string" && warning.length > 0);
 
         const folderNamesById: Record<string, string> = {};
         const allFolderIds: string[] = [];
-        if (foldersRes.status === "fulfilled") {
-          for (const f of foldersRes.value) {
-            if (!f.id || f.id.length === 0) continue;
-            allFolderIds.push(f.id);
-            folderNamesById[f.id] = f.name ?? f.id;
-          }
+        for (const f of foldersMeta.value ?? []) {
+          if (!f.id || f.id.length === 0) continue;
+          allFolderIds.push(f.id);
+          folderNamesById[f.id] = f.name ?? f.id;
         }
 
-        const allDatasetNames =
-          datasetsRes.status === "fulfilled"
-            ? datasetsRes.value
-                .map((d) => d.name)
-                .filter((n): n is string => typeof n === "string" && n.length > 0)
-            : [];
+        const allDatasetNames = (datasetsMeta.value ?? [])
+          .map((d) => d.name)
+          .filter((n): n is string => typeof n === "string" && n.length > 0);
 
-        const allRecipeNames =
-          recipesRes.status === "fulfilled"
-            ? recipesRes.value
-                .map((r) => r.name)
-                .filter((n): n is string => typeof n === "string" && n.length > 0)
-            : [];
-
-        const normalized = normalizeFlowGraph(rawGraph, pk, {
+        const allRecipeNames = (recipesMeta.value ?? [])
+          .map((r) => r.name)
+          .filter((n): n is string => typeof n === "string" && n.length > 0);
+        const normalizedBase = normalizeFlowGraph(rawGraph, pk, {
           folderNamesById,
           allDatasetNames,
           allRecipeNames,
           allFolderIds,
         });
+        const normalized =
+          metadataWarnings.length > 0
+            ? {
+                ...normalizedBase,
+                warnings: [...normalizedBase.warnings, ...metadataWarnings],
+              }
+            : normalizedBase;
         const effectiveMaxNodes = maxNodes ?? DEFAULT_MAP_MAX_NODES;
         const effectiveMaxEdges = maxEdges ?? DEFAULT_MAP_MAX_EDGES;
         const { map, truncation } = truncateFlowMap(

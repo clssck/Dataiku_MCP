@@ -4,6 +4,25 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const clientMocks = vi.hoisted(() => ({
+  DataikuError: class DataikuError extends Error {
+    category: "validation" | "not_found" | "unknown" = "validation";
+    retryable = false;
+    retryHint = "";
+    retry?: unknown;
+
+    constructor(
+      public status: number,
+      public statusText: string,
+      public body: string,
+      retry?: unknown,
+    ) {
+      super(body);
+      this.name = "DataikuError";
+      this.retry = retry;
+      if (status === 404) this.category = "not_found";
+      else if (status >= 500) this.category = "unknown";
+    }
+  },
   del: vi.fn(),
   get: vi.fn(),
   getProjectKey: vi.fn((projectKey?: string) => projectKey ?? "TEST_PROJECT"),
@@ -139,7 +158,7 @@ describe("Tool Errors And Summaries", () => {
   });
 
   it("connection infer returns no-connection message when none are discoverable", async () => {
-    clientMocks.get.mockResolvedValue([{ name: "ds_without_connection", managed: false }]);
+    clientMocks.get.mockResolvedValue([]);
 
     const { text, isError } = await callTool(registerConnections, "connection", {
       action: "infer",
@@ -175,6 +194,7 @@ describe("Tool Errors And Summaries", () => {
     const { text, isError } = await callTool(registerConnections, "connection", {
       action: "infer",
       projectKey: "PROJ",
+      mode: "rich",
     });
 
     expect(isError).toBeFalsy();
