@@ -124,9 +124,16 @@ function classifyDataikuError(status: number, body: string): DataikuErrorTaxonom
   };
 }
 
+function readTrimmedEnv(name: string): string | undefined {
+  const value = process.env[name];
+  if (value === undefined) return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 function getBaseUrl(): string {
   if (!_baseUrl) {
-    const url = process.env.DATAIKU_URL;
+    const url = readTrimmedEnv("DATAIKU_URL");
     if (!url) throw new Error("DATAIKU_URL environment variable is required");
     _baseUrl = url.replace(/\/+$/, "");
   }
@@ -135,7 +142,7 @@ function getBaseUrl(): string {
 
 function getApiKey(): string {
   if (!_apiKey) {
-    const key = process.env.DATAIKU_API_KEY;
+    const key = readTrimmedEnv("DATAIKU_API_KEY");
     if (!key) throw new Error("DATAIKU_API_KEY environment variable is required");
     _apiKey = key;
   }
@@ -158,13 +165,15 @@ function getAnyHeaders(): Record<string, string> {
 }
 
 export function getProjectKey(paramValue?: string): string {
-  const key = paramValue || process.env.DATAIKU_PROJECT_KEY;
-  if (!key) {
+  const paramKey = paramValue?.trim();
+  if (paramKey) return paramKey;
+  const envKey = readTrimmedEnv("DATAIKU_PROJECT_KEY");
+  if (!envKey) {
     throw new Error(
       "projectKey is required — pass it as a parameter or set DATAIKU_PROJECT_KEY env var",
     );
   }
-  return key;
+  return envKey;
 }
 
 export class DataikuError extends Error {

@@ -129,8 +129,8 @@ describe("DataikuError", () => {
 });
 
 describe("getProjectKey", () => {
-  it("returns param value when provided", () => {
-    expect(getProjectKey("MY_PROJECT")).toBe("MY_PROJECT");
+  it("returns trimmed param value when provided", () => {
+    expect(getProjectKey("  MY_PROJECT  ")).toBe("MY_PROJECT");
   });
 
   it("throws when no param and no env var", () => {
@@ -145,10 +145,11 @@ describe("getProjectKey", () => {
 
   it("falls back to env var when param is empty", () => {
     const original = process.env.DATAIKU_PROJECT_KEY;
-    process.env.DATAIKU_PROJECT_KEY = "ENV_PROJECT";
+    process.env.DATAIKU_PROJECT_KEY = "  ENV_PROJECT  ";
     try {
       expect(getProjectKey()).toBe("ENV_PROJECT");
       expect(getProjectKey("")).toBe("ENV_PROJECT");
+      expect(getProjectKey("   ")).toBe("ENV_PROJECT");
     } finally {
       if (original) {
         process.env.DATAIKU_PROJECT_KEY = original;
@@ -170,8 +171,8 @@ describe("request JSON handling", () => {
       }),
     );
 
-    process.env.DATAIKU_URL = "https://example.dataiku.io";
-    process.env.DATAIKU_API_KEY = "test-token";
+    process.env.DATAIKU_URL = "  https://example.dataiku.io/  ";
+    process.env.DATAIKU_API_KEY = "  test-token  ";
 
     try {
       await expect(get("/public/api/projects/")).rejects.toMatchObject({
