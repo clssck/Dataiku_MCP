@@ -62,7 +62,7 @@ describe.skipIf(!HAS_DSS)("Integration: MCP tools against live DSS", () => {
   describe("project", () => {
     it("list — lists accessible projects", async () => {
       const { text, isError } = await call("project", { action: "list" });
-      expect(isError).toBeFalsy();
+      expect(isError, text).toBeFalsy();
       expect(text).toContain("•");
     });
 
