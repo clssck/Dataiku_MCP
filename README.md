@@ -2,7 +2,7 @@
 
 MCP server for Dataiku DSS REST APIs, focused on flow analysis and reliable day-to-day operations (projects, datasets, recipes, jobs, scenarios, folders, variables, connections, and code environments).
 
-[![Add to Cursor](https://cursor.com/deeplink/mcp-install-light.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=dataiku-mcp&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImRhdGFpa3UtbWNwIl0sImVudiI6eyJEQVRBSUtVX1VSTCI6Imh0dHBzOi8veW91ci1kc3MtaW5zdGFuY2UuYXBwLmRhdGFpa3UuaW8iLCJEQVRBSUtVX0FQSV9LRVkiOiJ5b3VyX2FwaV9rZXkiLCJEQVRBSUtVX1BST0pFQ1RfS0VZIjoiWU9VUl9QUk9KRUNUX0tFWSJ9fQ%3D%3D)
+[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=dataiku-mcp&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImRhdGFpa3UtbWNwIl0sImVudiI6eyJEQVRBSUtVX1VSTCI6Imh0dHBzOi8veW91ci1kc3MtaW5zdGFuY2UuYXBwLmRhdGFpa3UuaW8iLCJEQVRBSUtVX0FQSV9LRVkiOiJ5b3VyX2FwaV9rZXkiLCJEQVRBSUtVX1BST0pFQ1RfS0VZIjoiWU9VUl9QUk9KRUNUX0tFWSJ9fQ%3D%3D)
 
 > Cursor one-click install includes placeholder environment values. Update `DATAIKU_URL`, `DATAIKU_API_KEY`, and optionally `DATAIKU_PROJECT_KEY` after adding the server.
 
