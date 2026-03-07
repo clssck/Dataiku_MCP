@@ -8,32 +8,10 @@ import { z } from "zod";
 import { DataikuError, del, get, getProjectKey, post, put, stream } from "../client.js";
 import { deepMerge } from "./deep-merge.js";
 import { emptyListText, filterByQuery, formatBulletText, paginateItems } from "./list-format.js";
+import { asRecord, asString, sanitizeFileName } from "./parse-utils.js";
 import { registerTool } from "./register-tool.js";
 
 const optionalProjectKey = z.string().optional();
-
-const WINDOWS_RESERVED_FILE_NAMES = /^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])$/i;
-function sanitizeFileName(name: string, fallback: string): string {
-  const sanitized = name
-    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "_")
-    .replace(/[. ]+$/g, "")
-    .trim();
-  if (!sanitized) return fallback;
-  const dotIndex = sanitized.indexOf(".");
-  const baseName = dotIndex === -1 ? sanitized : sanitized.slice(0, dotIndex);
-  const extension = dotIndex === -1 ? "" : sanitized.slice(dotIndex);
-  if (WINDOWS_RESERVED_FILE_NAMES.test(baseName)) return `${baseName}_${extension}`;
-  return sanitized;
-}
-
-function asString(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-  return value as Record<string, unknown>;
-}
 
 const DEFAULT_DATABASE_DATASET_TYPE = "Snowflake";
 const DEFAULT_FILESYSTEM_DATASET_TYPE = "Filesystem";

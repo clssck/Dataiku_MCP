@@ -605,7 +605,7 @@ export async function stream(
   const res = await fetchGetWithCache(path, getAnyHeaders());
 
   if (!res.body) {
-    throw new Error("No response body for stream request");
+    throw new DataikuError(0, "Stream Error", "No response body for stream request");
   }
 
   return {

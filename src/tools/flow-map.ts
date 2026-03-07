@@ -49,18 +49,7 @@ interface InternalNode {
 	successors: string[];
 }
 
-function asRecord(
-	value: unknown,
-): Record<string, unknown> | undefined {
-	if (value && typeof value === "object" && !Array.isArray(value)) {
-		return value as Record<string, unknown>;
-	}
-	return undefined;
-}
-
-function asString(value: unknown): string | undefined {
-	return typeof value === "string" && value.length > 0 ? value : undefined;
-}
+import { asRecord, asString } from "./parse-utils.js";
 
 function asStringArray(
 	value: unknown,

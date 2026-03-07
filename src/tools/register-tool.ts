@@ -5,6 +5,7 @@ import {
   isToolLatencyDebugEnabled,
   runWithToolLatency,
 } from "../debug-latency.js";
+import { asRecord } from "./parse-utils.js";
 
 type ToolResult = {
   content?: Array<{ type: string; text?: string; [key: string]: unknown }>;
@@ -66,13 +67,6 @@ function toErrorToolResult(error: unknown): ToolResult {
       message,
     },
   };
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
-  }
-  return undefined;
 }
 
 function extractAction(args: unknown[]): string | null {

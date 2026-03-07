@@ -5,27 +5,18 @@ import { pipeline } from "node:stream/promises";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { del, get, getProjectKey, stream, upload } from "../client.js";
-import { registerTool } from "./register-tool.js";
 import { emptyListText, filterByQuery, formatBulletText, paginateItems } from "./list-format.js";
+import { sanitizeFileName } from "./parse-utils.js";
+import { registerTool } from "./register-tool.js";
 
 const optionalProjectKey = z.string().optional();
 
-const WINDOWS_RESERVED_FILE_NAMES = /^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])$/i;
-function sanitizeFileName(name: string, fallback: string): string {
-  const sanitized = name
-    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "_")
-    .replace(/[. ]+$/g, "")
-    .trim();
-  if (!sanitized) return fallback;
-  const dotIndex = sanitized.indexOf(".");
-  const baseName = dotIndex === -1 ? sanitized : sanitized.slice(0, dotIndex);
-  const extension = dotIndex === -1 ? "" : sanitized.slice(dotIndex);
-  if (WINDOWS_RESERVED_FILE_NAMES.test(baseName)) return `${baseName}_${extension}`;
-  return sanitized;
-}
-
 function normalizeRemotePath(path: string): string {
-  return path.replace(/\\/g, "/");
+  const normalized = path.replace(/\\/g, "/");
+  if (normalized.split("/").some((seg) => seg === "..")) {
+    throw new Error("Path traversal ('..') is not allowed in remote paths");
+  }
+  return normalized;
 }
 
 function inferDownloadFileName(remotePath: string): string {
