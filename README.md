@@ -1,3 +1,18 @@
+> [!IMPORTANT]
+> ## Sunset — use [`clssck/dataiku-sdk`](https://github.com/clssck/dataiku-sdk) instead
+>
+> **Dataiku MCP Server is no longer actively maintained.** Development has moved to the
+> **[Dataiku DSS SDK](https://github.com/clssck/dataiku-sdk)** — a schema-first TypeScript SDK and
+> `dss` CLI that is more actively maintained and covers far more of the DSS API:
+>
+> - **Broader coverage** — 30+ DSS resources vs this server's narrow tool set.
+> - **A scriptable `dss` CLI** with a machine-readable command contract for agents.
+> - **One-command agent skill install** for Claude, Codex, Cursor, Pi, and OMP.
+>
+> Migrate here → **https://github.com/clssck/dataiku-sdk**
+>
+> ---
+
 # Dataiku MCP Server
 
 MCP server for Dataiku DSS REST APIs, focused on flow analysis and reliable day-to-day operations (projects, datasets, recipes, jobs, scenarios, folders, variables, connections, and code environments).
